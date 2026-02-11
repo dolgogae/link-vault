@@ -10,6 +10,7 @@ import { useColorScheme } from '@/components/useColorScheme';
 import { Colors } from '@/constants/theme';
 import { useAuthStore } from '@/stores/authStore';
 import { onAuthStateChanged } from '@/services/auth';
+import { useShareIntentHandler } from '@/hooks/useShareIntent';
 
 import '../global.css';
 
@@ -58,6 +59,9 @@ export default function RootLayout() {
 function RootLayoutNav() {
   const colorScheme = useColorScheme();
   const { user, isLoading } = useAuthStore();
+
+  // Share Extension 핸들러
+  useShareIntentHandler();
 
   // 인증 상태에 따른 리다이렉트
   useEffect(() => {
