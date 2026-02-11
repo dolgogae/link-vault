@@ -13,6 +13,8 @@ import { LinkCard } from '@/components/LinkCard';
 import { SearchBar } from '@/components/SearchBar';
 import { AddLinkModal } from '@/components/AddLinkModal';
 import { CategoryActionSheet } from '@/components/CategoryActionSheet';
+import { AdBanner } from '@/components/AdBanner';
+import { useInterstitialAd } from '@/hooks/useInterstitialAd';
 import { Category, Link } from '@/types';
 import * as WebBrowser from 'expo-web-browser';
 
@@ -31,6 +33,9 @@ export default function HomeScreen() {
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [showCategoryAction, setShowCategoryAction] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+
+  // 인터스티셜 광고
+  useInterstitialAd();
 
   const userId = user?.uid || '';
 
@@ -223,6 +228,9 @@ export default function HomeScreen() {
         onClose={() => setShowCategoryAction(false)}
         onUpdated={() => setRefreshKey((k) => k + 1)}
       />
+
+      {/* 하단 배너 광고 */}
+      <AdBanner />
     </View>
   );
 }
