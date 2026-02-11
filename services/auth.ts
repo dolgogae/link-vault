@@ -27,8 +27,9 @@ export async function signInWithGoogle() {
  * 애플 로그인
  */
 export async function signInWithApple() {
-  const appleCredential = await auth.AppleAuthProvider.credential();
-  const userCredential = await auth().signInWithCredential(appleCredential);
+  const userCredential = await auth().signInWithProvider(
+    auth.AppleAuthProvider as any,
+  );
   await createUserDocumentIfNeeded(userCredential.user, 'apple');
   return userCredential;
 }

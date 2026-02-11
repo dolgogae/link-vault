@@ -1,8 +1,6 @@
 import firestore from '@react-native-firebase/firestore';
-import { firebase } from '@/services/firebase';
+import functions from '@react-native-firebase/functions';
 import { Link } from '@/types';
-
-const functions = firebase.app().functions('us-central1');
 
 /**
  * URL을 분석하고 AI로 분류한 후 저장
@@ -12,17 +10,17 @@ export async function analyzeAndSaveLink(url: string): Promise<{
   categoryPath: string[];
 }> {
   // 1. 메타데이터 스크래핑
-  const analyzeResult = await functions.httpsCallable('analyzeLink')({ url });
-  const metadata = analyzeResult.data;
+  const analyzeResult = await functions().httpsCallable('analyzeLink')({ url });
+  const metadata = analyzeResult.data as any;
 
   // 2. AI 분류
-  const categorizeResult = await functions.httpsCallable('categorizeLink')({
+  const categorizeResult = await functions().httpsCallable('categorizeLink')({
     metadata,
   });
-  const classification = categorizeResult.data;
+  const classification = categorizeResult.data as any;
 
   // 3. 저장
-  const saveResult = await functions.httpsCallable('saveLink')({
+  const saveResult = await functions().httpsCallable('saveLink')({
     url,
     title: metadata.title,
     description: metadata.description,
@@ -35,7 +33,7 @@ export async function analyzeAndSaveLink(url: string): Promise<{
     icon: classification.icon,
   });
 
-  return saveResult.data;
+  return saveResult.data as { linkId: string; categoryPath: string[] };
 }
 
 /**
