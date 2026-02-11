@@ -1,0 +1,573 @@
+LinkVault
+
+AI 기반 스마트 링크 아카이빙 앱
+
+Software Requirements Specification (SRS)
+
+&
+
+Functional Requirements (FR)
+
+Version 1.0
+
+2026년 2월
+
+Claude Code 개발용 설계 문서
+
+목차 (Table of Contents)
+
+1. 프로젝트 개요
+
+1.1 앱 이름 및 브랜딩
+
+  ------------------ ---------------------------------------------------------
+  항목               내용
+
+  앱 이름            LinkVault (링크볼트)
+
+  대표 색상          #2563EB (Royal Blue) — 신뢰감, 정리된 느낌, 디지털 감성
+
+  보조 색상          #F59E0B (Amber) — CTA 버튼, 포인트 컬러
+
+  슬로건             "모든 링크, 알아서 정리됩니다"
+
+  타겟 플랫폼        iOS, Android (React Native)
+  ------------------ ---------------------------------------------------------
+
+1.2 프로젝트 목적
+
+사용자가 인터넷에서 수집하는 모든 링크(인스타그램, 유튜브, 네이버, 구글, 블로그, 뉴스, 논문 등)를 AI가 자동으로 분석하고 카테고리화하여 폴더 구조로 정리해주는 스마트 링크 아카이빙 앱을 개발한다.
+
+1.3 타겟 사용자
+
+-   일반 사용자: SNS, 쇼핑, 뉴스 등 다양한 링크를 정리하고 싶은 개인
+
+-   직장인: 업무 관련 자료, 레퍼런스, 보고서 링크를 체계적으로 관리하는 직장인
+
+-   연구자/학생: 논문, 학술자료, 강의자료 등을 카테고리별로 아카이빙하는 사용자
+
+-   콘텐츠 크리에이터: 영감, 레퍼런스, 트렌드 링크를 수집하고 관리하는 창작자
+
+1.4 핵심 가치
+
+-   자동 분류: LLM이 링크 내용을 분석하여 수동 분류 없이 자동으로 카테고리를 생성하고 배치
+
+-   간편한 저장: OS 공유 기능 또는 직접 URL 입력으로 즉시 저장
+
+-   직관적 탐색: 최대 4단계 폴더 구조로 깔끔한 정리와 빠른 접근 지원
+
+2. 기술 스택 결정
+
+2.1 프레임워크: React Native (Expo)
+
+React Native + Expo를 선택한다. Expo는 빌드 파이프라인, OTA 업데이트, 네이티브 모듈 관리를 간소화하여 1인 또는 소규모 팀에서 iOS/Android 동시 출시에 최적이다. Share Extension 구현을 위해 Expo의 custom dev client를 활용한다.
+
+2.2 백엔드: Firebase (Blaze Plan)
+
+Firebase를 백엔드로 선택한다. 다른 대안(Supabase, AWS Amplify)도 검토했으나, Firebase가 React Native 생태계와의 통합도, 소셜 로그인 지원, 서버리스 확장성, 무료 티어 범위에서 가장 유리하다.
+
+  -------------------- ----------------------------------------------- -----------------------------
+  서비스               용도                                            무료 한도
+
+  Firebase Auth        소셜 로그인 (카카오, 네이버, 구글, 애플)        50,000 MAU 무료
+
+  Cloud Firestore      사용자 데이터, 링크 메타데이터, 카테고리 트리   일 50K 읽기 / 20K 쓰기 무료
+
+  Cloud Functions      LLM API 호출, 링크 스크래핑, 분류 로직          월 2M 호출 무료
+
+  Cloud Storage        링크 OG 이미지 캐시, 스크린샷 저장              5GB 저장 무료
+
+  Firebase Analytics   사용자 행동 분석, 광고 최적화                   무제한 무료
+  -------------------- ----------------------------------------------- -----------------------------
+
+2.3 LLM 모델: GPT-5 Nano
+
+링크 분류 작업의 특성을 분석한 결과, GPT-5 Nano 모델을 선택한다.
+
+2.3.1 모델 선택 근거
+
+-   작업 특성: 링크 제목, 설명, OG 태그 등 짧은 텍스트를 분석하여 카테고리를 선택하는 분류(Classification) 작업은 LLM의 가장 기본적인 능력으로, nano 급 모델로 충분
+
+-   GPT-5 Nano vs GPT-4.1 Nano: GPT-5 Nano(2025년 8월 출시)가 더 최신이며, 분류/요약 특화 모델로 공식 소개됨. 가격도 Input $0.05/1M, Output $0.40/1M으로 GPT-4.1 Nano($0.10/$0.40)보다 입력 비용이 50% 저렴
+
+-   400K 토큰 컨텍스트 윈도우 지원으로 배치 처리 시에도 충분한 용량
+
+-   4단계 추론 레벨(minimal, low, medium, high) 지원으로 분류에는 minimal 사용하여 추가 비용 절감 가능
+
+2.3.2 예상 토큰 사용량 (링크 1건)
+
+  ------------------------------------------- ----------------------- -----------------------
+  구분                                        토큰 수                 비용
+
+  Input (시스템 프롬프트 + 링크 메타데이터)   ~500 토큰               $0.000025
+
+  Output (카테고리 JSON 응답)                 ~100 토큰               $0.00004
+
+  합계 (1건당)                                ~600 토큰               ~$0.000065
+  ------------------------------------------- ----------------------- -----------------------
+
+* 1만 건 분류 시 약 $0.65, 10만 건 분류 시 약 $6.5의 비용 발생
+
+3. 시스템 아키텍처
+
+3.1 전체 아키텍처 다이어그램
+
+[Client Layer] → [Firebase Layer] → [External APIs]
+
+React Native App → Firebase Auth / Firestore / Functions → OpenAI GPT-5 Nano API
+
+(Share Extension + 직접 입력) → Cloud Functions (링크 분석) → 웹 스크래핑 (OG 태그 추출)
+
+3.2 데이터 흐름
+
+1.  사용자가 앱에 링크를 전송 (공유 기능 또는 직접 URL 입력)
+
+2.  Cloud Function이 트리거되어 해당 URL의 메타데이터를 스크래핑 (title, description, OG tags, favicon)
+
+3.  스크래핑된 메타데이터를 GPT-5 Nano에 전달하여 카테고리 분류 요청
+
+4.  GPT-5 Nano가 기존 사용자 카테고리 트리를 참고하여 적절한 카테고리 경로를 반환 (최대 4단계)
+
+5.  분류 결과를 Firestore에 저장 (링크 문서 + 카테고리 트리 업데이트)
+
+6.  클라이언트에 실시간으로 반영 (Firestore onSnapshot)
+
+3.3 데이터 모델 (Firestore)
+
+3.3.1 Users 컬렉션
+
+users/{userId}
+
+-   displayName: string — 사용자 표시 이름
+
+-   email: string — 이메일
+
+-   provider: string — 로그인 제공자 (kakao, naver, google, apple)
+
+-   createdAt: timestamp
+
+-   linkCount: number — 총 저장 링크 수
+
+-   plan: string — 'free' | 'premium' (추후 확장)
+
+3.3.2 Categories 컬렉션
+
+users/{userId}/categories/{categoryId}
+
+-   name: string — 카테고리 이름 (예: '기술', '요리')
+
+-   parentId: string | null — 상위 카테고리 ID (null이면 루트)
+
+-   depth: number — 깊이 (0~3, 최대 4단계)
+
+-   order: number — 정렬 순서
+
+-   linkCount: number — 해당 카테고리 내 링크 수
+
+-   icon: string — 카테고리 아이콘 (이모지 또는 아이콘 코드)
+
+-   createdAt: timestamp
+
+3.3.3 Links 컬렉션
+
+users/{userId}/links/{linkId}
+
+-   url: string — 원본 URL
+
+-   title: string — 페이지 제목
+
+-   description: string — 페이지 설명
+
+-   ogImage: string — OG 이미지 URL
+
+-   favicon: string — 파비콘 URL
+
+-   domain: string — 도메인 (youtube.com, instagram.com 등)
+
+-   categoryPath: array<string> — 카테고리 경로 [catId1, catId2, catId3]
+
+-   tags: array<string> — AI가 추출한 키워드 태그
+
+-   savedAt: timestamp
+
+-   lastAccessedAt: timestamp
+
+-   isFavorite: boolean
+
+4. Functional Requirements (FR)
+
+4.1 인증 (Authentication)
+
+FR-AUTH-001: 소셜 로그인
+
+시스템은 카카오, 네이버, 구글, 애플 4가지 소셜 로그인을 지원해야 한다. 일반(이메일/패스워드) 로그인은 제공하지 않는다.
+
+-   카카오 로그인: Kakao JavaScript SDK + Firebase Custom Token 방식
+
+-   네이버 로그인: Naver Login SDK + Firebase Custom Token 방식
+
+-   구글 로그인: Firebase Auth 네이티브 지원
+
+-   애플 로그인: Firebase Auth 네이티브 지원 (iOS 앱스토어 필수 요건)
+
+FR-AUTH-002: 로그인 상태 유지
+
+앱을 재실행해도 로그인 상태가 유지되어야 한다. Firebase Auth의 persistence 설정을 활용한다.
+
+FR-AUTH-003: 로그아웃 및 계정 삭제
+
+사용자는 설정 화면에서 로그아웃 및 계정 삭제(탈퇴)를 할 수 있다. 계정 삭제 시 Firestore의 모든 사용자 데이터가 함께 삭제된다.
+
+4.2 링크 저장 (Link Saving)
+
+FR-LINK-001: OS 공유 기능으로 링크 저장
+
+사용자는 다른 앱(브라우저, 인스타그램, 유튜브, 네이버 등)에서 공유 버튼을 눌러 LinkVault에 링크를 전송할 수 있다.
+
+-   iOS: Share Extension을 구현하여 시스템 공유 시트에 LinkVault가 표시됨
+
+-   Android: Intent Filter를 등록하여 text/plain 타입의 공유 데이터를 수신
+
+-   공유 시 별도의 앱 내 화면 전환 없이 백그라운드에서 저장 및 분류가 진행됨
+
+-   저장 완료 시 토스트 알림으로 결과 표시: "[카테고리명]에 저장되었습니다"
+
+FR-LINK-002: 직접 URL 입력으로 링크 저장
+
+앱 내 메인 화면의 입력 필드 또는 플로팅 버튼을 통해 URL을 직접 입력하거나 붙여넣기하여 저장할 수 있다.
+
+-   URL 유효성 검증 (정규식 + HEAD 요청으로 접근 가능 여부 확인)
+
+-   입력 즉시 분석 시작, 로딩 인디케이터 표시
+
+-   분석 완료 후 자동 분류 결과를 프리뷰로 보여주고 확인 또는 수정 가능
+
+FR-LINK-003: 링크 메타데이터 추출
+
+Cloud Function이 URL을 받아 다음 메타데이터를 추출한다:
+
+-   페이지 제목 (title 또는 og:title)
+
+-   페이지 설명 (description 또는 og:description)
+
+-   OG 이미지 (og:image)
+
+-   파비콘 (favicon)
+
+-   도메인 정보
+
+-   페이지 본문 텍스트 (처음 500자, 분류 정확도 향상용)
+
+4.3 AI 자동 분류 (AI Auto-Categorization)
+
+FR-AI-001: 자동 카테고리 선택
+
+GPT-5 Nano가 링크 메타데이터를 분석하여 자동으로 카테고리를 결정한다.
+
+-   기존 사용자 카테고리 트리를 프롬프트에 포함하여 일관된 분류 유도
+
+-   적합한 기존 카테고리가 없으면 새 카테고리를 자동 생성
+
+-   응답 형식: JSON { "categoryPath": ["기술", "프로그래밍", "Python"], "isNew": false, "tags": ["파이썬", "튜토리얼"] }
+
+FR-AI-002: 카테고리 깊이 제한 (최대 4단계)
+
+카테고리 경로는 최대 4단계를 넘지 않아야 한다. 프롬프트에 이 제약을 명시하여 LLM이 5단계 이상의 분류를 생성하지 않도록 한다.
+
+예시: 기술 > 프로그래밍 > Python > 튜토리얼 (4단계, 최대)
+
+FR-AI-003: 분류 결과 수정
+
+사용자는 AI가 자동 분류한 결과를 수동으로 변경할 수 있다. 카테고리 선택 화면에서 폴더 트리를 탐색하여 다른 위치로 이동하거나, 새 카테고리를 직접 생성할 수 있다.
+
+FR-AI-004: 프롬프트 설계
+
+Cloud Function에서 사용하는 시스템 프롬프트는 다음을 포함해야 한다:
+
+-   역할 정의: "당신은 웹 링크를 분석하여 카테고리로 분류하는 전문가입니다"
+
+-   기존 카테고리 트리 (사용자별)
+
+-   최대 깊이 제약 (4단계)
+
+-   출력 형식 (JSON)
+
+-   한국어 카테고리 이름 사용 지시
+
+-   분류 기준: 콘텐츠 주제 > 플랫폼/형식 > 세부 주제 순
+
+4.4 카테고리 및 폴더 관리
+
+FR-CAT-001: 폴더 형식 탐색
+
+메인 화면에서 카테고리를 폴더 형식으로 탐색할 수 있다. 루트 카테고리 목록이 표시되고, 탭하면 하위 카테고리 또는 링크 목록으로 진입한다.
+
+FR-CAT-002: 카테고리 CRUD
+
+사용자는 카테고리를 생성, 수정(이름 변경), 삭제, 이동할 수 있다. 카테고리 삭제 시 하위 링크의 처리 방식을 선택할 수 있다 (함께 삭제 / 상위 카테고리로 이동).
+
+FR-CAT-003: 카테고리 아이콘
+
+각 카테고리에 이모지 아이콘을 지정할 수 있다. AI 분류 시 적절한 이모지를 함께 추천한다.
+
+FR-CAT-004: 드래그 앤 드롭 정렬
+
+카테고리와 링크의 순서를 드래그 앤 드롭으로 변경할 수 있다.
+
+4.5 링크 관리
+
+FR-LINK-004: 링크 목록 보기
+
+카테고리 내의 링크를 리스트 또는 카드 형태로 볼 수 있다. 각 링크 항목에는 제목, 설명(1줄), OG 이미지 썸네일, 도메인, 저장 일시가 표시된다.
+
+FR-LINK-005: 링크 열기
+
+링크를 탭하면 인앱 브라우저(WebView) 또는 외부 브라우저로 열 수 있다. 설정에서 기본 동작을 선택할 수 있다.
+
+FR-LINK-006: 링크 검색
+
+전체 링크를 제목, URL, 태그, 설명 기준으로 검색할 수 있다. Firestore의 복합 쿼리 또는 클라이언트 사이드 필터링을 활용한다.
+
+FR-LINK-007: 링크 삭제 및 즐겨찾기
+
+링크를 삭제하거나 즐겨찾기로 표시할 수 있다. 즐겨찾기 링크는 별도 탭에서 모아볼 수 있다.
+
+FR-LINK-008: 링크 이동
+
+링크를 다른 카테고리로 수동 이동할 수 있다. 멀티 선택 후 일괄 이동도 지원한다.
+
+4.6 광고 및 수익화
+
+FR-AD-001: Google AdMob 배너 광고
+
+앱 하단에 고정 배너 광고를 표시한다. 메인 화면(카테고리 목록)과 링크 목록 화면에 배너를 배치한다. 링크 상세보기, 설정 화면에서는 배너를 표시하지 않는다.
+
+FR-AD-002: 인터스티셜 광고
+
+링크 저장 5회마다 또는 앱 세션 시작 시 1회 전면 광고를 표시한다. 사용자 경험을 해치지 않도록 빈도를 제한한다.
+
+FR-AD-003: 쿠팡 파트너스 연동
+
+쇼핑 카테고리에 분류된 링크가 쿠팡 상품인 경우, 쿠팡 파트너스 딥링크로 변환하여 수수료 수익을 발생시킨다. 쿠팡 외 쇼핑 링크에도 관련 쿠팡 상품을 추천 배너로 표시할 수 있다.
+
+FR-AD-004: 프리미엄 구독 (향후 확장)
+
+광고 제거, 무제한 링크 저장, 고급 AI 분류(GPT-5 mini 사용) 등의 프리미엄 기능을 월 구독 형태로 제공할 수 있도록 데이터 구조를 설계해둔다.
+
+4.7 UI/UX 설계 가이드
+
+FR-UI-001: 온보딩
+
+첫 실행 시 3~4장의 온보딩 슬라이드로 앱의 핵심 가치를 소개한다.
+
+-   슬라이드 1: "링크를 공유하면 AI가 알아서 정리합니다"
+
+-   슬라이드 2: "폴더처럼 깔끔하게 탐색하세요"
+
+-   슬라이드 3: "어디서든, 무엇이든 아카이빙"
+
+-   슬라이드 4: 소셜 로그인 선택 화면
+
+FR-UI-002: 메인 화면 구성
+
+메인 화면 구성:
+
+-   상단: 검색바 + 프로필 아이콘
+
+-   중앙: 카테고리 폴더 그리드 또는 리스트 (토글 가능)
+
+-   하단: 탭 바 (홈, 검색, 즐겨찾기, 설정)
+
+-   플로팅 액션 버튼(FAB): URL 직접 입력
+
+-   최하단: AdMob 배너 광고 영역
+
+FR-UI-003: 다크 모드
+
+시스템 설정에 따른 자동 다크 모드 전환을 지원하며, 앱 내에서도 수동 전환이 가능하다.
+
+FR-UI-004: 알림
+
+링크 저장 완료, 분류 완료, 분류 실패(재시도 필요) 시 인앱 토스트 또는 푸시 알림을 표시한다.
+
+5. 비기능 요구사항 (Non-Functional Requirements)
+
+5.1 성능
+
+-   링크 저장 → 분류 완료까지 3초 이내 (네트워크 상태 양호 기준)
+
+-   앱 콜드 스타트 시간 2초 이내
+
+-   Firestore 읽기 최적화: 페이지네이션 (한 번에 20개), 오프라인 캐시 활용
+
+5.2 보안
+
+-   Firebase Security Rules로 사용자별 데이터 격리
+
+-   OpenAI API 키는 Cloud Function 내에서만 사용, 클라이언트 노출 금지
+
+-   HTTPS 전용 통신
+
+-   소셜 로그인 토큰은 Firebase Custom Token으로 교환 후 원본 토큰 폐기
+
+5.3 확장성
+
+-   Firestore의 자동 스케일링으로 사용자 증가에 대응
+
+-   Cloud Functions의 인스턴스 자동 확장
+
+-   LLM 모델 교체 가능하도록 API 레이어를 추상화 (향후 Claude, Gemini 등으로 교체 가능)
+
+5.4 가용성
+
+-   Firebase의 SLA (99.95% 가용성) 준수
+
+-   오프라인 지원: Firestore 오프라인 캐시로 네트워크 없이도 저장된 링크 열람 가능
+
+5.5 국제화
+
+-   v1.0은 한국어만 지원
+
+-   i18n 구조를 미리 설계하여 향후 영어, 일본어 등 추가 용이하게 설계
+
+6. 프로젝트 구조 (Claude Code용)
+
+6.1 디렉토리 구조
+
+linkvault/
+
+├── app/ # Expo Router 기반 화면
+
+│ ├── (auth)/ # 인증 관련 화면
+
+│ ├── (tabs)/ # 메인 탭 화면
+
+│ └── _layout.tsx
+
+├── components/ # 재사용 컴포넌트
+
+│ ├── LinkCard.tsx
+
+│ ├── CategoryFolder.tsx
+
+│ ├── SearchBar.tsx
+
+│ └── AdBanner.tsx
+
+├── services/ # API 및 비즈니스 로직
+
+│ ├── firebase.ts
+
+│ ├── auth.ts
+
+│ ├── links.ts
+
+│ └── categories.ts
+
+├── hooks/ # 커스텀 훅
+
+├── utils/ # 유틸리티
+
+├── constants/ # 상수, 테마
+
+├── functions/ # Firebase Cloud Functions
+
+│ ├── src/
+
+│ │ ├── analyzeLink.ts # 링크 메타데이터 스크래핑
+
+│ │ ├── categorize.ts # GPT-5 Nano 분류 로직
+
+│ │ └── auth.ts # 커스텀 토큰 발급 (카카오/네이버)
+
+│ └── package.json
+
+└── package.json
+
+6.2 주요 의존성
+
+  -------------------------------- -------------------------- -----------------------
+  패키지                           용도                       영역
+
+  expo                             React Native 프레임워크    Client
+
+  expo-router                      파일 기반 라우팅           Client
+
+  @react-native-firebase/*         Firebase SDK               Client
+
+  react-native-share-menu          Share Extension            Client
+
+  react-native-google-mobile-ads   AdMob 연동                 Client
+
+  openai (npm)                     GPT-5 Nano API             Functions
+
+  cheerio                          HTML 파싱 (OG 태그 추출)   Functions
+
+  firebase-admin                   서버사이드 Firebase        Functions
+  -------------------------------- -------------------------- -----------------------
+
+7. 개발 마일스톤
+
+  --------- -------------------- ------------------------------------------------------------------------- -------------------
+  Phase     기간                 주요 작업                                                                 산출물
+
+  Phase 0   1주차                프로젝트 셋업, Firebase 프로젝트 생성, Expo 초기화, 소셜 로그인 앱 등록   빌드 가능한 빈 앱
+
+  Phase 1   2~3주차              소셜 로그인 구현 (카카오, 네이버, 구글, 애플), 사용자 프로필 화면         인증 완료 앱
+
+  Phase 2   4~5주차              Cloud Function: 링크 스크래핑 + GPT-5 Nano 분류, 직접 URL 입력 기능       분류 엔진 동작
+
+  Phase 3   6~7주차              폴더 UI, 카테고리 CRUD, 링크 목록/상세, 검색                              핵심 UI 완성
+
+  Phase 4   8주차                Share Extension (iOS/Android), 백그라운드 저장                            공유 기능 완성
+
+  Phase 5   9주차                AdMob 배너/인터스티셜, 쿠팡 파트너스 연동                                 수익화 완성
+
+  Phase 6   10~11주차            QA, 버그 수정, 성능 최적화, 다크 모드                                     출시 후보(RC)
+
+  Phase 7   12주차               앱스토어 / 플레이스토어 심사 제출, 출시                                   v1.0 출시
+  --------- -------------------- ------------------------------------------------------------------------- -------------------
+
+총 예상 개발 기간: 약 12주 (3개월)
+
+8. Claude Code 개발 지시사항
+
+8.1 코딩 컨벤션
+
+-   TypeScript 필수 (strict mode)
+
+-   함수형 컴포넌트 + React Hooks 패턴
+
+-   상태관리: Zustand 또는 Context API
+
+-   스타일링: NativeWind (Tailwind CSS for React Native)
+
+-   파일 네이밍: PascalCase (컴포넌트), camelCase (유틸리티, 훅)
+
+8.2 Cloud Functions 작성 가이드
+
+-   Node.js 20 런타임
+
+-   환경 변수: OPENAI_API_KEY는 Firebase Secret Manager에 저장
+
+-   에러 핸들링: try-catch + 재시도 로직 (최대 2회)
+
+-   타임아웃: 링크 스크래핑 10초, LLM 호출 15초
+
+-   콜드 스타트 최소화: 전역 초기화 패턴 사용
+
+8.3 테스트 전략
+
+-   단위 테스트: Jest (분류 로직, 유틸리티 함수)
+
+-   통합 테스트: Firebase Emulator Suite 활용
+
+-   E2E 테스트: Detox (주요 사용자 플로우)
+
+8.4 보안 관련 지시
+
+-   Firestore Rules: 사용자 자신의 문서에만 read/write 허용
+
+-   Cloud Functions: 인증된 사용자만 호출 가능 (callable function + auth context)
+
+-   API 키 노출 금지: 모든 외부 API 호출은 Cloud Functions를 통해서만
