@@ -1,29 +1,21 @@
 import firestore from '@react-native-firebase/firestore';
 import { Category } from '@/types';
+import { getCategoriesRef, getLinksRef, convertTimestamp } from '@/utils/firestore';
 
 export function getRootCategoriesQuery(userId: string) {
-  return firestore()
-    .collection('users')
-    .doc(userId)
-    .collection('categories')
+  return getCategoriesRef(userId)
     .where('parentId', '==', null)
     .orderBy('order');
 }
 
 export function getChildCategoriesQuery(userId: string, parentId: string) {
-  return firestore()
-    .collection('users')
-    .doc(userId)
-    .collection('categories')
+  return getCategoriesRef(userId)
     .where('parentId', '==', parentId)
     .orderBy('order');
 }
 
 export async function getAllCategories(userId: string): Promise<Category[]> {
-  const snapshot = await firestore()
-    .collection('users')
-    .doc(userId)
-    .collection('categories')
+  const snapshot = await getCategoriesRef(userId)
     .orderBy('depth')
     .orderBy('order')
     .get();
@@ -31,7 +23,7 @@ export async function getAllCategories(userId: string): Promise<Category[]> {
   return snapshot.docs.map((doc) => ({
     id: doc.id,
     ...doc.data(),
-    createdAt: doc.data().createdAt?.toDate() || new Date(),
+    createdAt: convertTimestamp(doc.data().createdAt),
   })) as Category[];
 }
 
@@ -44,10 +36,7 @@ export async function createCategory(
     icon: string;
   },
 ): Promise<string> {
-  const siblings = await firestore()
-    .collection('users')
-    .doc(userId)
-    .collection('categories')
+  const siblings = await getCategoriesRef(userId)
     .where('parentId', '==', data.parentId)
     .orderBy('order', 'desc')
     .limit(1)
@@ -55,39 +44,25 @@ export async function createCategory(
 
   const maxOrder = siblings.empty ? 0 : (siblings.docs[0].data().order || 0) + 1;
 
-  const docRef = await firestore()
-    .collection('users')
-    .doc(userId)
-    .collection('categories')
-    .add({
-      name: data.name,
-      parentId: data.parentId,
-      depth: data.depth,
-      order: maxOrder,
-      linkCount: 0,
-      icon: data.icon,
-      createdAt: firestore.FieldValue.serverTimestamp(),
-    });
+  const docRef = await getCategoriesRef(userId).add({
+    name: data.name,
+    parentId: data.parentId,
+    depth: data.depth,
+    order: maxOrder,
+    linkCount: 0,
+    icon: data.icon,
+    createdAt: firestore.FieldValue.serverTimestamp(),
+  });
 
   return docRef.id;
 }
 
 export async function renameCategory(userId: string, categoryId: string, newName: string) {
-  await firestore()
-    .collection('users')
-    .doc(userId)
-    .collection('categories')
-    .doc(categoryId)
-    .update({ name: newName });
+  await getCategoriesRef(userId).doc(categoryId).update({ name: newName });
 }
 
 export async function updateCategoryIcon(userId: string, categoryId: string, icon: string) {
-  await firestore()
-    .collection('users')
-    .doc(userId)
-    .collection('categories')
-    .doc(categoryId)
-    .update({ icon });
+  await getCategoriesRef(userId).doc(categoryId).update({ icon });
 }
 
 /**
@@ -99,20 +74,13 @@ export async function deleteCategory(
   parentId: string | null,
   moveToParent: boolean,
 ) {
-  const db = firestore();
-  const batch = db.batch();
+  const batch = firestore().batch();
 
-  const children = await db
-    .collection('users')
-    .doc(userId)
-    .collection('categories')
+  const children = await getCategoriesRef(userId)
     .where('parentId', '==', categoryId)
     .get();
 
-  const links = await db
-    .collection('users')
-    .doc(userId)
-    .collection('links')
+  const links = await getLinksRef(userId)
     .where('categoryPath', 'array-contains', categoryId)
     .get();
 
@@ -134,8 +102,7 @@ export async function deleteCategory(
     children.docs.forEach((doc) => batch.delete(doc.ref));
   }
 
-  const catRef = db.collection('users').doc(userId).collection('categories').doc(categoryId);
-  batch.delete(catRef);
+  batch.delete(getCategoriesRef(userId).doc(categoryId));
 
   await batch.commit();
 }
@@ -147,12 +114,7 @@ export async function reorderCategories(
   const batch = firestore().batch();
 
   orderedIds.forEach((id, index) => {
-    const ref = firestore()
-      .collection('users')
-      .doc(userId)
-      .collection('categories')
-      .doc(id);
-    batch.update(ref, { order: index });
+    batch.update(getCategoriesRef(userId).doc(id), { order: index });
   });
 
   await batch.commit();

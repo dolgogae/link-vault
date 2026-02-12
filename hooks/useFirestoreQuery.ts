@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
+import { convertTimestamp } from '@/utils/firestore';
 
 export function useFirestoreQuery<T>(
   queryFn: (() => FirebaseFirestoreTypes.Query) | null,
@@ -24,9 +25,9 @@ export function useFirestoreQuery<T>(
         const items = snapshot.docs.map((doc) => ({
           id: doc.id,
           ...doc.data(),
-          createdAt: doc.data().createdAt?.toDate?.() || new Date(),
-          savedAt: doc.data().savedAt?.toDate?.() || new Date(),
-          lastAccessedAt: doc.data().lastAccessedAt?.toDate?.() || new Date(),
+          createdAt: convertTimestamp(doc.data().createdAt),
+          savedAt: convertTimestamp(doc.data().savedAt),
+          lastAccessedAt: convertTimestamp(doc.data().lastAccessedAt),
         })) as T[];
         setData(items);
         setLoading(false);

@@ -1,6 +1,7 @@
 import firestore from '@react-native-firebase/firestore';
 import functions from '@react-native-firebase/functions';
 import { Link } from '@/types';
+import { getUserRef, getLinksRef, getCategoriesRef } from '@/utils/firestore';
 
 export async function analyzeAndSaveLink(url: string): Promise<{
   linkId: string;
@@ -35,10 +36,7 @@ export function getLinksQuery(
   categoryId?: string,
   pageSize = 20,
 ) {
-  let query = firestore()
-    .collection('users')
-    .doc(userId)
-    .collection('links')
+  let query = getLinksRef(userId)
     .orderBy('savedAt', 'desc')
     .limit(pageSize);
 
@@ -50,44 +48,29 @@ export function getLinksQuery(
 }
 
 export function getFavoriteLinksQuery(userId: string, pageSize = 20) {
-  return firestore()
-    .collection('users')
-    .doc(userId)
-    .collection('links')
+  return getLinksRef(userId)
     .where('isFavorite', '==', true)
     .orderBy('savedAt', 'desc')
     .limit(pageSize);
 }
 
 export async function toggleFavorite(userId: string, linkId: string, isFavorite: boolean) {
-  await firestore()
-    .collection('users')
-    .doc(userId)
-    .collection('links')
-    .doc(linkId)
-    .update({ isFavorite: !isFavorite });
+  await getLinksRef(userId).doc(linkId).update({ isFavorite: !isFavorite });
 }
 
 export async function deleteLink(userId: string, linkId: string, categoryPath: string[]) {
   const batch = firestore().batch();
 
-  const linkRef = firestore().collection('users').doc(userId).collection('links').doc(linkId);
-  batch.delete(linkRef);
+  batch.delete(getLinksRef(userId).doc(linkId));
 
   if (categoryPath.length > 0) {
     const lastCatId = categoryPath[categoryPath.length - 1];
-    const catRef = firestore()
-      .collection('users')
-      .doc(userId)
-      .collection('categories')
-      .doc(lastCatId);
-    batch.update(catRef, {
+    batch.update(getCategoriesRef(userId).doc(lastCatId), {
       linkCount: firestore.FieldValue.increment(-1),
     });
   }
 
-  const userRef = firestore().collection('users').doc(userId);
-  batch.update(userRef, {
+  batch.update(getUserRef(userId), {
     linkCount: firestore.FieldValue.increment(-1),
   });
 
@@ -102,25 +85,20 @@ export async function moveLink(
 ) {
   const batch = firestore().batch();
 
-  const linkRef = firestore().collection('users').doc(userId).collection('links').doc(linkId);
-  batch.update(linkRef, { categoryPath: newCategoryPath });
+  batch.update(getLinksRef(userId).doc(linkId), { categoryPath: newCategoryPath });
 
   if (oldCategoryPath.length > 0) {
-    const oldCatRef = firestore()
-      .collection('users')
-      .doc(userId)
-      .collection('categories')
-      .doc(oldCategoryPath[oldCategoryPath.length - 1]);
-    batch.update(oldCatRef, { linkCount: firestore.FieldValue.increment(-1) });
+    batch.update(
+      getCategoriesRef(userId).doc(oldCategoryPath[oldCategoryPath.length - 1]),
+      { linkCount: firestore.FieldValue.increment(-1) },
+    );
   }
 
   if (newCategoryPath.length > 0) {
-    const newCatRef = firestore()
-      .collection('users')
-      .doc(userId)
-      .collection('categories')
-      .doc(newCategoryPath[newCategoryPath.length - 1]);
-    batch.update(newCatRef, { linkCount: firestore.FieldValue.increment(1) });
+    batch.update(
+      getCategoriesRef(userId).doc(newCategoryPath[newCategoryPath.length - 1]),
+      { linkCount: firestore.FieldValue.increment(1) },
+    );
   }
 
   await batch.commit();
@@ -129,10 +107,7 @@ export async function moveLink(
 export async function searchLinks(userId: string, query: string): Promise<Link[]> {
   const lowerQuery = query.toLowerCase();
 
-  const snapshot = await firestore()
-    .collection('users')
-    .doc(userId)
-    .collection('links')
+  const snapshot = await getLinksRef(userId)
     .orderBy('savedAt', 'desc')
     .get();
 
