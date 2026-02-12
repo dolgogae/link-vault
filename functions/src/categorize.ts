@@ -1,12 +1,8 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
-import * as admin from 'firebase-admin';
 import { defineSecret } from 'firebase-functions/params';
 import OpenAI from 'openai';
 import { LinkMetadata } from './analyzeLink';
-
-if (!admin.apps.length) {
-  admin.initializeApp();
-}
+import { admin } from './admin';
 
 const openaiApiKey = defineSecret('OPENAI_API_KEY');
 

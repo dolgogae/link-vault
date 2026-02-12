@@ -1,10 +1,5 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
-import * as admin from 'firebase-admin';
 import * as cheerio from 'cheerio';
-
-if (!admin.apps.length) {
-  admin.initializeApp();
-}
 
 export interface LinkMetadata {
   title: string;
