@@ -41,7 +41,7 @@ export function useShareIntentHandler() {
   };
 }
 
-function extractUrl(text: string): string | null {
+export function extractUrl(text: string): string | null {
   const urlRegex = /https?:\/\/[^\s<>"{}|\\^`\[\]]+/gi;
   const matches = text.match(urlRegex);
   return matches?.[0] || null;
