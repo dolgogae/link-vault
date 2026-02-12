@@ -2,24 +2,18 @@ import firestore from '@react-native-firebase/firestore';
 import functions from '@react-native-firebase/functions';
 import { Link } from '@/types';
 
-/**
- * URL을 분석하고 AI로 분류한 후 저장
- */
 export async function analyzeAndSaveLink(url: string): Promise<{
   linkId: string;
   categoryPath: string[];
 }> {
-  // 1. 메타데이터 스크래핑
   const analyzeResult = await functions().httpsCallable('analyzeLink')({ url });
   const metadata = analyzeResult.data as any;
 
-  // 2. AI 분류
   const categorizeResult = await functions().httpsCallable('categorizeLink')({
     metadata,
   });
   const classification = categorizeResult.data as any;
 
-  // 3. 저장
   const saveResult = await functions().httpsCallable('saveLink')({
     url,
     title: metadata.title,
@@ -36,9 +30,6 @@ export async function analyzeAndSaveLink(url: string): Promise<{
   return saveResult.data as { linkId: string; categoryPath: string[] };
 }
 
-/**
- * 카테고리 내 링크 목록 조회 (페이지네이션)
- */
 export function getLinksQuery(
   userId: string,
   categoryId?: string,
@@ -58,9 +49,6 @@ export function getLinksQuery(
   return query;
 }
 
-/**
- * 즐겨찾기 링크 조회
- */
 export function getFavoriteLinksQuery(userId: string, pageSize = 20) {
   return firestore()
     .collection('users')
@@ -71,9 +59,6 @@ export function getFavoriteLinksQuery(userId: string, pageSize = 20) {
     .limit(pageSize);
 }
 
-/**
- * 즐겨찾기 토글
- */
 export async function toggleFavorite(userId: string, linkId: string, isFavorite: boolean) {
   await firestore()
     .collection('users')
@@ -83,17 +68,12 @@ export async function toggleFavorite(userId: string, linkId: string, isFavorite:
     .update({ isFavorite: !isFavorite });
 }
 
-/**
- * 링크 삭제
- */
 export async function deleteLink(userId: string, linkId: string, categoryPath: string[]) {
   const batch = firestore().batch();
 
-  // 링크 삭제
   const linkRef = firestore().collection('users').doc(userId).collection('links').doc(linkId);
   batch.delete(linkRef);
 
-  // 카테고리 linkCount 감소
   if (categoryPath.length > 0) {
     const lastCatId = categoryPath[categoryPath.length - 1];
     const catRef = firestore()
@@ -106,7 +86,6 @@ export async function deleteLink(userId: string, linkId: string, categoryPath: s
     });
   }
 
-  // 사용자 linkCount 감소
   const userRef = firestore().collection('users').doc(userId);
   batch.update(userRef, {
     linkCount: firestore.FieldValue.increment(-1),
@@ -115,9 +94,6 @@ export async function deleteLink(userId: string, linkId: string, categoryPath: s
   await batch.commit();
 }
 
-/**
- * 링크를 다른 카테고리로 이동
- */
 export async function moveLink(
   userId: string,
   linkId: string,
@@ -129,7 +105,6 @@ export async function moveLink(
   const linkRef = firestore().collection('users').doc(userId).collection('links').doc(linkId);
   batch.update(linkRef, { categoryPath: newCategoryPath });
 
-  // 이전 카테고리 linkCount 감소
   if (oldCategoryPath.length > 0) {
     const oldCatRef = firestore()
       .collection('users')
@@ -139,7 +114,6 @@ export async function moveLink(
     batch.update(oldCatRef, { linkCount: firestore.FieldValue.increment(-1) });
   }
 
-  // 새 카테고리 linkCount 증가
   if (newCategoryPath.length > 0) {
     const newCatRef = firestore()
       .collection('users')
@@ -152,9 +126,6 @@ export async function moveLink(
   await batch.commit();
 }
 
-/**
- * 링크 검색 (클라이언트 사이드)
- */
 export async function searchLinks(userId: string, query: string): Promise<Link[]> {
   const lowerQuery = query.toLowerCase();
 

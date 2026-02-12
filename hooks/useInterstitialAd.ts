@@ -12,10 +12,6 @@ const INTERSTITIAL_AD_UNIT_ID = __DEV__
 
 const SAVE_COUNT_THRESHOLD = 5;
 
-/**
- * 인터스티셜 광고 훅
- * 링크 저장 5회마다 전면 광고 표시
- */
 export function useInterstitialAd() {
   const interstitialRef = useRef<InterstitialAd | null>(null);
   const { saveCount } = useLinkStore();
@@ -26,12 +22,9 @@ export function useInterstitialAd() {
       requestNonPersonalizedAdsOnly: true,
     });
 
-    const unsubscribeLoaded = interstitial.addAdEventListener(AdEventType.LOADED, () => {
-      // 광고 로드 완료
-    });
+    const unsubscribeLoaded = interstitial.addAdEventListener(AdEventType.LOADED, () => {});
 
     const unsubscribeClosed = interstitial.addAdEventListener(AdEventType.CLOSED, () => {
-      // 닫힌 후 다음 광고 미리 로드
       interstitial.load();
     });
 

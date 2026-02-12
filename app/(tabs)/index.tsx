@@ -86,9 +86,7 @@ export default function HomeScreen() {
 
   return (
     <View className="flex-1 bg-background dark:bg-background-dark">
-      {/* 헤더 */}
       <View className="pt-2 px-4 pb-1">
-        {/* Breadcrumb */}
         {categoryBreadcrumb.length > 0 && (
           <View className="flex-row items-center mb-2">
             <Pressable onPress={goBackCategory} className="mr-2 p-1">
@@ -114,7 +112,6 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* 뷰 모드 토글 */}
         <View className="flex-row justify-end mb-1">
           <Pressable onPress={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}>
             <FontAwesome
@@ -126,7 +123,6 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      {/* 컨텐츠 */}
       <FlatList
         data={[
           ...(categories.length > 0 ? [{ type: 'categories' as const, items: categories }] : []),
@@ -205,7 +201,6 @@ export default function HomeScreen() {
         }}
       />
 
-      {/* FAB */}
       <Pressable
         onPress={() => setShowAddModal(true)}
         className="absolute bottom-6 right-6 w-14 h-14 bg-primary rounded-full items-center justify-center shadow-lg active:bg-primary-dark"
@@ -214,7 +209,6 @@ export default function HomeScreen() {
         <FontAwesome name="plus" size={22} color="#FFFFFF" />
       </Pressable>
 
-      {/* 모달 */}
       <AddLinkModal
         visible={showAddModal}
         onClose={() => setShowAddModal(false)}
@@ -229,7 +223,6 @@ export default function HomeScreen() {
         onUpdated={() => setRefreshKey((k) => k + 1)}
       />
 
-      {/* 하단 배너 광고 */}
       <AdBanner />
     </View>
   );

@@ -77,14 +77,12 @@ export function AddLinkModal({ visible, onClose, onSaved }: AddLinkModalProps) {
       >
         <Pressable className="flex-1" onPress={onClose} />
         <View className="bg-background dark:bg-background-dark rounded-t-3xl p-6 pb-10 shadow-xl">
-          {/* 핸들 */}
           <View className="w-10 h-1 bg-text-secondary/30 rounded-full self-center mb-6" />
 
           <Text className="text-lg font-bold text-text dark:text-text-dark mb-4">
             링크 추가
           </Text>
 
-          {/* URL 입력 */}
           <View className="flex-row items-center bg-surface dark:bg-surface-dark rounded-xl px-4 py-3 mb-4">
             <FontAwesome name="link" size={16} color="#9CA3AF" />
             <TextInput
@@ -101,7 +99,6 @@ export function AddLinkModal({ visible, onClose, onSaved }: AddLinkModalProps) {
             />
           </View>
 
-          {/* 저장 버튼 */}
           <Pressable
             onPress={handleSave}
             disabled={!url.trim() || isAnalyzing}

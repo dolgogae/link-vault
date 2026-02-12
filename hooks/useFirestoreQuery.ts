@@ -1,9 +1,6 @@
 import { useState, useEffect } from 'react';
 import { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
 
-/**
- * Firestore 실시간 쿼리 훅
- */
 export function useFirestoreQuery<T>(
   queryFn: (() => FirebaseFirestoreTypes.Query) | null,
   deps: any[] = [],

@@ -59,7 +59,6 @@ export default function OnboardingScreen() {
 
   return (
     <View className="flex-1 bg-background dark:bg-background-dark">
-      {/* Skip 버튼 */}
       <View className="absolute top-14 right-6 z-10">
         <Pressable onPress={handleSkip}>
           <Text className="text-text-secondary dark:text-text-dark-secondary text-base">
@@ -68,7 +67,6 @@ export default function OnboardingScreen() {
         </Pressable>
       </View>
 
-      {/* 슬라이드 */}
       <FlatList
         ref={flatListRef}
         data={slides}
@@ -96,9 +94,7 @@ export default function OnboardingScreen() {
         )}
       />
 
-      {/* 인디케이터 + 버튼 */}
       <View className="pb-16 px-6 items-center">
-        {/* 도트 인디케이터 */}
         <View className="flex-row gap-2 mb-8">
           {slides.map((_, index) => (
             <View
@@ -112,7 +108,6 @@ export default function OnboardingScreen() {
           ))}
         </View>
 
-        {/* 다음/시작 버튼 */}
         <Pressable
           onPress={handleNext}
           className="w-full bg-primary py-4 rounded-xl items-center active:bg-primary-dark"

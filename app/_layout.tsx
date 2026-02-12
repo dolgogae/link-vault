@@ -30,12 +30,10 @@ export default function RootLayout() {
 
   const { setUser, setLoading } = useAuthStore();
 
-  // Google Sign-In 초기화
   useEffect(() => {
     initializeGoogleSignIn();
   }, []);
 
-  // Auth 상태 리스너
   useEffect(() => {
     const unsubscribe = onAuthStateChanged((user) => {
       setUser(user);

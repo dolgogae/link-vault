@@ -18,9 +18,6 @@ interface SaveLinkData {
   icon: string;
 }
 
-/**
- * 링크를 Firestore에 저장하고 카테고리 linkCount를 업데이트하는 Cloud Function
- */
 export const saveLink = onCall<SaveLinkData>(
   { timeoutSeconds: 10 },
   async (request) => {
@@ -32,7 +29,6 @@ export const saveLink = onCall<SaveLinkData>(
     const data = request.data;
     const db = admin.firestore();
 
-    // 중복 URL 검사
     const existing = await db
       .collection('users')
       .doc(userId)
@@ -47,7 +43,6 @@ export const saveLink = onCall<SaveLinkData>(
 
     const batch = db.batch();
 
-    // 링크 문서 생성
     const linkRef = db.collection('users').doc(userId).collection('links').doc();
     batch.set(linkRef, {
       url: data.url,
@@ -63,7 +58,6 @@ export const saveLink = onCall<SaveLinkData>(
       isFavorite: false,
     });
 
-    // 카테고리 linkCount 증가 (마지막 카테고리만)
     if (data.categoryIds.length > 0) {
       const lastCatId = data.categoryIds[data.categoryIds.length - 1];
       const catRef = db
@@ -76,7 +70,6 @@ export const saveLink = onCall<SaveLinkData>(
       });
     }
 
-    // 사용자 linkCount 증가
     const userRef = db.collection('users').doc(userId);
     batch.update(userRef, {
       linkCount: admin.firestore.FieldValue.increment(1),

@@ -43,7 +43,6 @@ export default function SettingsScreen() {
 
   return (
     <ScrollView className="flex-1 bg-background dark:bg-background-dark">
-      {/* 프로필 */}
       <View className="items-center pt-6 pb-8">
         <View className="w-16 h-16 rounded-full bg-primary/10 items-center justify-center mb-3">
           <FontAwesome name="user" size={28} color="#2563EB" />
@@ -56,7 +55,6 @@ export default function SettingsScreen() {
         </Text>
       </View>
 
-      {/* 일반 설정 */}
       <SectionHeader title="일반" />
       <SettingRow
         icon="moon-o"
@@ -69,13 +67,11 @@ export default function SettingsScreen() {
       />
       <SettingRow icon="external-link" label="링크 열기 방식" value="인앱 브라우저" />
 
-      {/* 정보 */}
       <SectionHeader title="정보" />
       <SettingRow icon="info-circle" label="버전" value="1.0.0" />
       <SettingRow icon="shield" label="개인정보처리방침" />
       <SettingRow icon="file-text-o" label="이용약관" />
 
-      {/* 계정 */}
       <SectionHeader title="계정" />
       <SettingRow icon="sign-out" label="로그아웃" onPress={handleSignOut} />
       <SettingRow

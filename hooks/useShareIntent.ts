@@ -5,10 +5,6 @@ import { useAuthStore } from '@/stores/authStore';
 import { useLinkStore } from '@/stores/linkStore';
 import { analyzeAndSaveLink } from '@/services/links';
 
-/**
- * OS 공유 기능으로 전달된 URL을 처리하는 훅
- * 백그라운드에서 저장 + 분류를 진행하고 토스트로 결과를 알림
- */
 export function useShareIntentHandler() {
   const { shareIntent, resetShareIntent } = useShareIntent();
   const { user } = useAuthStore();
@@ -45,9 +41,6 @@ export function useShareIntentHandler() {
   };
 }
 
-/**
- * 공유된 텍스트에서 URL 추출
- */
 function extractUrl(text: string): string | null {
   const urlRegex = /https?:\/\/[^\s<>"{}|\\^`\[\]]+/gi;
   const matches = text.match(urlRegex);

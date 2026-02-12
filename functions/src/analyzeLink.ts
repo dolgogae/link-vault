@@ -15,10 +15,6 @@ export interface LinkMetadata {
   bodyText: string;
 }
 
-/**
- * URL에서 메타데이터를 스크래핑하는 Cloud Function
- * - title, description, OG image, favicon, domain, 본문 500자
- */
 export const analyzeLink = onCall<{ url: string }>(
   { timeoutSeconds: 30, memory: '256MiB' },
   async (request) => {
@@ -31,7 +27,6 @@ export const analyzeLink = onCall<{ url: string }>(
       throw new HttpsError('invalid-argument', 'URL이 필요합니다.');
     }
 
-    // URL 유효성 검증
     let parsedUrl: URL;
     try {
       parsedUrl = new URL(url);
@@ -39,7 +34,6 @@ export const analyzeLink = onCall<{ url: string }>(
       throw new HttpsError('invalid-argument', '유효하지 않은 URL입니다.');
     }
 
-    // 스크래핑 (10초 타임아웃)
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10000);
 
@@ -62,7 +56,6 @@ export const analyzeLink = onCall<{ url: string }>(
       const html = await response.text();
       const $ = cheerio.load(html);
 
-      // 메타데이터 추출
       const title =
         $('meta[property="og:title"]').attr('content') ||
         $('title').text() ||
@@ -77,18 +70,15 @@ export const analyzeLink = onCall<{ url: string }>(
         $('meta[property="og:image"]').attr('content') ||
         '';
 
-      // favicon 추출
       let favicon =
         $('link[rel="icon"]').attr('href') ||
         $('link[rel="shortcut icon"]').attr('href') ||
         '/favicon.ico';
 
-      // 상대 경로를 절대 경로로 변환
       if (favicon && !favicon.startsWith('http')) {
         favicon = `${parsedUrl.protocol}//${parsedUrl.host}${favicon.startsWith('/') ? '' : '/'}${favicon}`;
       }
 
-      // 본문 텍스트 추출 (처음 500자)
       $('script, style, nav, header, footer').remove();
       const bodyText = $('body').text().replace(/\s+/g, ' ').trim().slice(0, 500);
 

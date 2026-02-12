@@ -24,9 +24,6 @@ interface ClassificationResult {
   icon: string;
 }
 
-/**
- * GPT-5 Nano로 링크를 자동 분류하는 Cloud Function
- */
 export const categorizeLink = onCall<{
   metadata: LinkMetadata;
   userId: string;
@@ -44,7 +41,6 @@ export const categorizeLink = onCall<{
     const { metadata } = request.data;
     const userId = request.auth.uid;
 
-    // 사용자의 기존 카테고리 트리 조회
     const categoriesSnapshot = await admin
       .firestore()
       .collection('users')
@@ -59,11 +55,9 @@ export const categorizeLink = onCall<{
       ...doc.data(),
     }));
 
-    // 트리 구조로 변환
     const categoryTree = buildCategoryTree(categories);
     const treeString = formatCategoryTree(categoryTree);
 
-    // GPT-5 Nano에 분류 요청 (15초 타임아웃)
     const openai = new OpenAI({ apiKey: openaiApiKey.value() });
 
     let retries = 0;
@@ -96,7 +90,6 @@ export const categorizeLink = onCall<{
 
         result = JSON.parse(content) as ClassificationResult;
 
-        // 카테고리 깊이 검증 (최대 4단계)
         if (result.categoryPath.length > 4) {
           result.categoryPath = result.categoryPath.slice(0, 4);
         }
@@ -110,17 +103,14 @@ export const categorizeLink = onCall<{
             `AI 분류 실패 (${maxRetries}회 재시도 후): ${error.message}`,
           );
         }
-        // 재시도 전 잠시 대기
         await new Promise((resolve) => setTimeout(resolve, 1000));
       }
     }
 
-    // 새 카테고리인 경우 Firestore에 생성
     if (result.isNew) {
       await createCategoryPath(userId, result.categoryPath, result.icon);
     }
 
-    // 카테고리 경로를 ID 배열로 변환
     const categoryIds = await resolveCategoryIds(userId, result.categoryPath);
 
     return {
@@ -211,7 +201,6 @@ async function createCategoryPath(
       .doc(userId)
       .collection('categories');
 
-    // 같은 이름 + 같은 부모의 카테고리가 이미 있는지 확인
     let query = categoriesRef.where('name', '==', name).where('depth', '==', depth);
     if (parentId) {
       query = query.where('parentId', '==', parentId);
@@ -223,7 +212,6 @@ async function createCategoryPath(
       continue;
     }
 
-    // 새 카테고리 생성
     const newCat = await categoriesRef.add({
       name,
       parentId,

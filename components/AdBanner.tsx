@@ -9,11 +9,6 @@ interface AdBannerProps {
   show?: boolean;
 }
 
-/**
- * AdMob 배너 광고 컴포넌트
- * 메인 화면(카테고리 목록)과 링크 목록 화면에 배치
- * 링크 상세보기, 설정 화면에서는 표시하지 않음
- */
 export function AdBanner({ show = true }: AdBannerProps) {
   if (!show) return null;
 

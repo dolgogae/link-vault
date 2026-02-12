@@ -1,5 +1,3 @@
-// Firestore Data Models
-
 export interface User {
   displayName: string;
   email: string;
@@ -35,7 +33,6 @@ export interface Link {
   isFavorite: boolean;
 }
 
-// AI Classification Response
 export interface ClassificationResult {
   categoryPath: string[];
   isNew: boolean;
@@ -43,7 +40,6 @@ export interface ClassificationResult {
   icon?: string;
 }
 
-// Link Metadata (from scraping)
 export interface LinkMetadata {
   title: string;
   description: string;

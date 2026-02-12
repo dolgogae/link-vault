@@ -51,7 +51,6 @@ export default function LoginScreen() {
 
   return (
     <View className="flex-1 bg-background dark:bg-background-dark justify-center px-6">
-      {/* 로고 영역 */}
       <View className="items-center mb-16">
         <View className="w-20 h-20 rounded-2xl bg-primary items-center justify-center mb-4">
           <FontAwesome name="link" size={36} color="#FFFFFF" />
@@ -64,9 +63,7 @@ export default function LoginScreen() {
         </Text>
       </View>
 
-      {/* 소셜 로그인 버튼들 */}
       <View className="gap-3">
-        {/* 카카오 */}
         <Pressable
           onPress={handleKakaoLogin}
           disabled={loading !== null}
@@ -85,7 +82,6 @@ export default function LoginScreen() {
           )}
         </Pressable>
 
-        {/* 구글 */}
         <Pressable
           onPress={handleGoogleLogin}
           disabled={loading !== null}
@@ -103,7 +99,6 @@ export default function LoginScreen() {
           )}
         </Pressable>
 
-        {/* 애플 (iOS만) */}
         {Platform.OS === 'ios' && (
           <Pressable
             onPress={handleAppleLogin}
@@ -124,7 +119,6 @@ export default function LoginScreen() {
         )}
       </View>
 
-      {/* 하단 안내 */}
       <Text className="text-xs text-text-secondary dark:text-text-dark-secondary text-center mt-8 leading-4">
         로그인 시 이용약관 및 개인정보처리방침에 동의하게 됩니다.
       </Text>

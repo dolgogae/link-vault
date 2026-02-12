@@ -2,35 +2,29 @@ import { create } from 'zustand';
 import { Link, Category } from '@/types';
 
 interface LinkStore {
-  // Links
   links: Link[];
   favoriteLinks: Link[];
   searchResults: Link[];
   isLoadingLinks: boolean;
 
-  // Categories
   categories: Category[];
   currentCategoryId: string | null;
   categoryBreadcrumb: { id: string; name: string }[];
 
-  // Save state
   isSaving: boolean;
-  saveCount: number; // 인터스티셜 광고 카운터용
+  saveCount: number;
 
-  // Actions - Links
   setLinks: (links: Link[]) => void;
   setFavoriteLinks: (links: Link[]) => void;
   setSearchResults: (results: Link[]) => void;
   setLoadingLinks: (loading: boolean) => void;
   incrementSaveCount: () => void;
 
-  // Actions - Categories
   setCategories: (categories: Category[]) => void;
   navigateToCategory: (categoryId: string | null, name?: string) => void;
   goBackCategory: () => void;
   resetNavigation: () => void;
 
-  // Actions - Save
   setSaving: (saving: boolean) => void;
 }
 
