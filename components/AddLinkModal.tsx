@@ -4,15 +4,13 @@ import {
   Text,
   TextInput,
   Pressable,
-  Modal,
   ActivityIndicator,
   Alert,
-  KeyboardAvoidingView,
-  Platform,
 } from 'react-native';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { analyzeAndSaveLink } from '@/services/links';
 import { useLinkStore } from '@/stores/linkStore';
+import { BottomSheet } from '@/components/BottomSheet';
 
 interface AddLinkModalProps {
   visible: boolean;
@@ -65,68 +63,49 @@ export function AddLinkModal({ visible, onClose, onSaved }: AddLinkModalProps) {
   };
 
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      transparent
-      onRequestClose={onClose}
-    >
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        className="flex-1 justify-end"
+    <BottomSheet visible={visible} onClose={onClose} title="링크 추가">
+      <View className="flex-row items-center bg-surface dark:bg-surface-dark rounded-xl px-4 py-3 mb-4">
+        <FontAwesome name="link" size={16} color="#9CA3AF" />
+        <TextInput
+          value={url}
+          onChangeText={setUrl}
+          placeholder="URL을 입력하거나 붙여넣기"
+          placeholderTextColor="#9CA3AF"
+          className="flex-1 ml-3 text-base text-text dark:text-text-dark"
+          autoCapitalize="none"
+          autoCorrect={false}
+          keyboardType="url"
+          autoFocus
+          editable={!isAnalyzing}
+        />
+      </View>
+
+      <Pressable
+        onPress={handleSave}
+        disabled={!url.trim() || isAnalyzing}
+        className={`py-4 rounded-xl items-center ${
+          url.trim() && !isAnalyzing
+            ? 'bg-primary active:bg-primary-dark'
+            : 'bg-text-secondary/20'
+        }`}
       >
-        <Pressable className="flex-1" onPress={onClose} />
-        <View className="bg-background dark:bg-background-dark rounded-t-3xl p-6 pb-10 shadow-xl">
-          <View className="w-10 h-1 bg-text-secondary/30 rounded-full self-center mb-6" />
-
-          <Text className="text-lg font-bold text-text dark:text-text-dark mb-4">
-            링크 추가
-          </Text>
-
-          <View className="flex-row items-center bg-surface dark:bg-surface-dark rounded-xl px-4 py-3 mb-4">
-            <FontAwesome name="link" size={16} color="#9CA3AF" />
-            <TextInput
-              value={url}
-              onChangeText={setUrl}
-              placeholder="URL을 입력하거나 붙여넣기"
-              placeholderTextColor="#9CA3AF"
-              className="flex-1 ml-3 text-base text-text dark:text-text-dark"
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType="url"
-              autoFocus
-              editable={!isAnalyzing}
-            />
+        {isAnalyzing ? (
+          <View className="flex-row items-center">
+            <ActivityIndicator size="small" color="#FFFFFF" />
+            <Text className="text-white text-base font-semibold ml-2">
+              AI 분석 중...
+            </Text>
           </View>
-
-          <Pressable
-            onPress={handleSave}
-            disabled={!url.trim() || isAnalyzing}
-            className={`py-4 rounded-xl items-center ${
-              url.trim() && !isAnalyzing
-                ? 'bg-primary active:bg-primary-dark'
-                : 'bg-text-secondary/20'
+        ) : (
+          <Text
+            className={`text-base font-semibold ${
+              url.trim() ? 'text-white' : 'text-text-secondary'
             }`}
           >
-            {isAnalyzing ? (
-              <View className="flex-row items-center">
-                <ActivityIndicator size="small" color="#FFFFFF" />
-                <Text className="text-white text-base font-semibold ml-2">
-                  AI 분석 중...
-                </Text>
-              </View>
-            ) : (
-              <Text
-                className={`text-base font-semibold ${
-                  url.trim() ? 'text-white' : 'text-text-secondary'
-                }`}
-              >
-                저장하기
-              </Text>
-            )}
-          </Pressable>
-        </View>
-      </KeyboardAvoidingView>
-    </Modal>
+            저장하기
+          </Text>
+        )}
+      </Pressable>
+    </BottomSheet>
   );
 }

@@ -14,6 +14,7 @@ import { SearchBar } from '@/components/SearchBar';
 import { AddLinkModal } from '@/components/AddLinkModal';
 import { CategoryActionSheet } from '@/components/CategoryActionSheet';
 import { AdBanner } from '@/components/AdBanner';
+import { EmptyState } from '@/components/EmptyState';
 import { useInterstitialAd } from '@/hooks/useInterstitialAd';
 import { Category, Link } from '@/types';
 import * as WebBrowser from 'expo-web-browser';
@@ -137,20 +138,13 @@ export default function HomeScreen() {
         }
         ListEmptyComponent={
           !isLoading ? (
-            <View className="flex-1 items-center justify-center pt-20">
-              <FontAwesome name="folder-open-o" size={48} color="#9CA3AF" />
-              <Text className="text-base text-text-secondary dark:text-text-dark-secondary mt-4">
-                {currentCategoryId
-                  ? '이 카테고리가 비어있습니다'
-                  : '아직 저장된 링크가 없습니다'}
-              </Text>
-              <Pressable
-                onPress={() => setShowAddModal(true)}
-                className="mt-4 bg-primary px-6 py-2.5 rounded-xl"
-              >
-                <Text className="text-white font-medium">첫 링크 저장하기</Text>
-              </Pressable>
-            </View>
+            <EmptyState
+              icon="folder-open-o"
+              title={currentCategoryId
+                ? '이 카테고리가 비어있습니다'
+                : '아직 저장된 링크가 없습니다'}
+              action={{ label: '첫 링크 저장하기', onPress: () => setShowAddModal(true) }}
+            />
           ) : null
         }
         renderItem={({ item: section }) => {

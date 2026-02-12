@@ -1,4 +1,4 @@
-import { View, Text, Pressable, Modal, Alert, TextInput } from 'react-native';
+import { View, Text, Pressable, Alert, TextInput } from 'react-native';
 import { useState } from 'react';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { Category } from '@/types';
@@ -7,6 +7,7 @@ import {
   deleteCategory,
   updateCategoryIcon,
 } from '@/services/categories';
+import { BottomSheet } from '@/components/BottomSheet';
 
 interface CategoryActionSheetProps {
   visible: boolean;
@@ -99,84 +100,76 @@ export function CategoryActionSheet({
   if (!category) return null;
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={resetAndClose}>
-      <Pressable className="flex-1 bg-black/40 justify-end" onPress={resetAndClose}>
-        <View
-          className="bg-background dark:bg-background-dark rounded-t-3xl p-6 pb-10"
-          onStartShouldSetResponder={() => true}
-        >
-          <View className="w-10 h-1 bg-text-secondary/30 rounded-full self-center mb-4" />
-          <Text className="text-lg font-bold text-text dark:text-text-dark mb-4">
-            {category.icon} {category.name}
-          </Text>
-
-          {mode === 'actions' && (
-            <View className="gap-2">
-              <ActionButton
-                icon="pencil"
-                label="이름 변경"
-                onPress={() => {
-                  setNewName(category.name);
-                  setMode('rename');
-                }}
-              />
-              <ActionButton
-                icon="smile-o"
-                label="아이콘 변경"
-                onPress={() => {
-                  setNewIcon(category.icon);
-                  setMode('icon');
-                }}
-              />
-              <ActionButton
-                icon="trash"
-                label="삭제"
-                onPress={handleDelete}
-                destructive
-              />
-            </View>
-          )}
-
-          {mode === 'rename' && (
-            <View>
-              <TextInput
-                value={newName}
-                onChangeText={setNewName}
-                placeholder="새 이름"
-                placeholderTextColor="#9CA3AF"
-                className="bg-surface dark:bg-surface-dark rounded-xl px-4 py-3 text-base text-text dark:text-text-dark mb-4"
-                autoFocus
-              />
-              <Pressable
-                onPress={handleRename}
-                className="bg-primary py-3 rounded-xl items-center"
-              >
-                <Text className="text-white font-semibold">변경</Text>
-              </Pressable>
-            </View>
-          )}
-
-          {mode === 'icon' && (
-            <View>
-              <TextInput
-                value={newIcon}
-                onChangeText={setNewIcon}
-                placeholder="이모지 입력"
-                placeholderTextColor="#9CA3AF"
-                className="bg-surface dark:bg-surface-dark rounded-xl px-4 py-3 text-2xl text-center mb-4"
-                autoFocus
-              />
-              <Pressable
-                onPress={handleIconChange}
-                className="bg-primary py-3 rounded-xl items-center"
-              >
-                <Text className="text-white font-semibold">변경</Text>
-              </Pressable>
-            </View>
-          )}
+    <BottomSheet
+      visible={visible}
+      onClose={resetAndClose}
+      title={`${category.icon} ${category.name}`}
+    >
+      {mode === 'actions' && (
+        <View className="gap-2">
+          <ActionButton
+            icon="pencil"
+            label="이름 변경"
+            onPress={() => {
+              setNewName(category.name);
+              setMode('rename');
+            }}
+          />
+          <ActionButton
+            icon="smile-o"
+            label="아이콘 변경"
+            onPress={() => {
+              setNewIcon(category.icon);
+              setMode('icon');
+            }}
+          />
+          <ActionButton
+            icon="trash"
+            label="삭제"
+            onPress={handleDelete}
+            destructive
+          />
         </View>
-      </Pressable>
-    </Modal>
+      )}
+
+      {mode === 'rename' && (
+        <View>
+          <TextInput
+            value={newName}
+            onChangeText={setNewName}
+            placeholder="새 이름"
+            placeholderTextColor="#9CA3AF"
+            className="bg-surface dark:bg-surface-dark rounded-xl px-4 py-3 text-base text-text dark:text-text-dark mb-4"
+            autoFocus
+          />
+          <Pressable
+            onPress={handleRename}
+            className="bg-primary py-3 rounded-xl items-center"
+          >
+            <Text className="text-white font-semibold">변경</Text>
+          </Pressable>
+        </View>
+      )}
+
+      {mode === 'icon' && (
+        <View>
+          <TextInput
+            value={newIcon}
+            onChangeText={setNewIcon}
+            placeholder="이모지 입력"
+            placeholderTextColor="#9CA3AF"
+            className="bg-surface dark:bg-surface-dark rounded-xl px-4 py-3 text-2xl text-center mb-4"
+            autoFocus
+          />
+          <Pressable
+            onPress={handleIconChange}
+            className="bg-primary py-3 rounded-xl items-center"
+          >
+            <Text className="text-white font-semibold">변경</Text>
+          </Pressable>
+        </View>
+      )}
+    </BottomSheet>
   );
 }
 

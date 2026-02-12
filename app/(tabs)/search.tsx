@@ -1,11 +1,11 @@
 import { useState, useCallback } from 'react';
-import { View, Text, FlatList, ActivityIndicator } from 'react-native';
-import FontAwesome from '@expo/vector-icons/FontAwesome';
+import { View, FlatList, ActivityIndicator } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 
 import { useAuthStore } from '@/stores/authStore';
 import { SearchBar } from '@/components/SearchBar';
 import { LinkCard } from '@/components/LinkCard';
+import { EmptyState } from '@/components/EmptyState';
 import { searchLinks, toggleFavorite } from '@/services/links';
 import { Link } from '@/types';
 
@@ -71,24 +71,15 @@ export default function SearchScreen() {
       )}
 
       {!isSearching && hasSearched && results.length === 0 && (
-        <View className="items-center pt-20">
-          <FontAwesome name="search" size={48} color="#9CA3AF" />
-          <Text className="text-base text-text-secondary dark:text-text-dark-secondary mt-4">
-            검색 결과가 없습니다
-          </Text>
-        </View>
+        <EmptyState icon="search" title="검색 결과가 없습니다" />
       )}
 
       {!isSearching && !hasSearched && (
-        <View className="items-center pt-20">
-          <FontAwesome name="search" size={48} color="#D1D5DB" />
-          <Text className="text-base text-text-secondary dark:text-text-dark-secondary mt-4">
-            링크를 검색해보세요
-          </Text>
-          <Text className="text-sm text-text-secondary/60 mt-1">
-            제목, URL, 태그, 설명으로 검색할 수 있습니다
-          </Text>
-        </View>
+        <EmptyState
+          icon="search"
+          title="링크를 검색해보세요"
+          subtitle="제목, URL, 태그, 설명으로 검색할 수 있습니다"
+        />
       )}
 
       <FlatList
