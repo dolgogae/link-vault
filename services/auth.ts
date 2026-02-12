@@ -1,8 +1,10 @@
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
+import functions from '@react-native-firebase/functions';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
+import * as KakaoLogin from '@react-native-seoul/kakao-login';
 import { User } from '@/types';
 
 /**
@@ -102,6 +104,39 @@ export async function signInWithApple() {
 
   // Firestore 사용자 문서 생성
   await createUserDocumentIfNeeded(userCredential.user, 'apple');
+
+  return userCredential;
+}
+
+/**
+ * 카카오 로그인
+ *
+ * 흐름:
+ * 1. KakaoLogin.login() → accessToken 획득
+ * 2. Cloud Function createKakaoToken에 accessToken 전달
+ * 3. Cloud Function이 카카오 API로 사용자 검증 후 Firebase Custom Token 반환
+ * 4. auth().signInWithCustomToken(customToken) → Firebase 로그인
+ * 5. Firestore users 문서 생성 (최초 1회)
+ */
+export async function signInWithKakao() {
+  // 카카오 SDK 로그인 UI 표시
+  const result = await KakaoLogin.login();
+  const { accessToken } = result;
+  if (!accessToken) {
+    throw new Error('카카오 로그인에서 accessToken을 받지 못했습니다.');
+  }
+
+  // Cloud Function으로 Firebase Custom Token 발급
+  const response = await functions().httpsCallable('createKakaoToken')({
+    accessToken,
+  });
+  const { customToken } = response.data as { customToken: string };
+
+  // Firebase 로그인
+  const userCredential = await auth().signInWithCustomToken(customToken);
+
+  // Firestore 사용자 문서 생성
+  await createUserDocumentIfNeeded(userCredential.user, 'kakao');
 
   return userCredential;
 }
