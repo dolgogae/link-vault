@@ -3,7 +3,7 @@
 export interface User {
   displayName: string;
   email: string;
-  provider: 'google' | 'apple';
+  provider: 'google' | 'apple' | 'kakao';
   createdAt: Date;
   linkCount: number;
   plan: 'free' | 'premium';
