@@ -1,12 +1,7 @@
 import { create } from 'zustand';
-import { Link, Category } from '@/types';
+import { Category } from '@/types';
 
 interface LinkStore {
-  links: Link[];
-  favoriteLinks: Link[];
-  searchResults: Link[];
-  isLoadingLinks: boolean;
-
   categories: Category[];
   currentCategoryId: string | null;
   categoryBreadcrumb: { id: string; name: string }[];
@@ -14,10 +9,6 @@ interface LinkStore {
   isSaving: boolean;
   saveCount: number;
 
-  setLinks: (links: Link[]) => void;
-  setFavoriteLinks: (links: Link[]) => void;
-  setSearchResults: (results: Link[]) => void;
-  setLoadingLinks: (loading: boolean) => void;
   incrementSaveCount: () => void;
 
   setCategories: (categories: Category[]) => void;
@@ -29,11 +20,6 @@ interface LinkStore {
 }
 
 export const useLinkStore = create<LinkStore>((set) => ({
-  links: [],
-  favoriteLinks: [],
-  searchResults: [],
-  isLoadingLinks: false,
-
   categories: [],
   currentCategoryId: null,
   categoryBreadcrumb: [],
@@ -41,10 +27,6 @@ export const useLinkStore = create<LinkStore>((set) => ({
   isSaving: false,
   saveCount: 0,
 
-  setLinks: (links) => set({ links }),
-  setFavoriteLinks: (links) => set({ favoriteLinks: links }),
-  setSearchResults: (results) => set({ searchResults: results }),
-  setLoadingLinks: (isLoadingLinks) => set({ isLoadingLinks }),
   incrementSaveCount: () => set((state) => ({ saveCount: state.saveCount + 1 })),
 
   setCategories: (categories) => set({ categories }),
