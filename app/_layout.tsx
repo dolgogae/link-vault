@@ -9,7 +9,7 @@ import 'react-native-reanimated';
 import { useColorScheme } from '@/components/useColorScheme';
 import { Colors } from '@/constants/theme';
 import { useAuthStore } from '@/stores/authStore';
-import { onAuthStateChanged } from '@/services/auth';
+import { onAuthStateChanged, initializeGoogleSignIn } from '@/services/auth';
 import { useShareIntentHandler } from '@/hooks/useShareIntent';
 
 import '../global.css';
@@ -29,6 +29,11 @@ export default function RootLayout() {
   });
 
   const { setUser, setLoading } = useAuthStore();
+
+  // Google Sign-In 초기화
+  useEffect(() => {
+    initializeGoogleSignIn();
+  }, []);
 
   // Auth 상태 리스너
   useEffect(() => {
