@@ -16,7 +16,8 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.linkvault.app",
-      "googleServicesFile": "./GoogleService-Info.plist"
+      "googleServicesFile": "./GoogleService-Info.plist",
+      "usesAppleSignIn": true
     },
     "android": {
       "package": "com.linkvault.app",
@@ -38,19 +39,13 @@
       "@react-native-firebase/app",
       "@react-native-firebase/auth",
       "@react-native-google-signin/google-signin",
+      "expo-apple-authentication",
       "expo-share-intent",
-      [
-        "@react-native-seoul/kakao-login",
-        {
-          "kakaoAppKey": "YOUR_KAKAO_NATIVE_APP_KEY",
-          "kotlinVersion": "1.9.25"
-        }
-      ],
       [
         "react-native-google-mobile-ads",
         {
-          "androidAppId": "ca-app-pub-xxxxxxxxxxxxxxxx~yyyyyyyyyy",
-          "iosAppId": "ca-app-pub-xxxxxxxxxxxxxxxx~yyyyyyyyyy"
+          "androidAppId": "ca-app-pub-5234234878363803~8534862763",
+          "iosAppId": "ca-app-pub-5234234878363803~8151719388"
         }
       ]
     ],

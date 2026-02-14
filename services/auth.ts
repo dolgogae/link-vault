@@ -1,10 +1,8 @@
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
-import functions from '@react-native-firebase/functions';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
-import * as KakaoLogin from '@react-native-seoul/kakao-login';
 import { User } from '@/types';
 
 export function initializeGoogleSignIn() {
@@ -72,25 +70,6 @@ export async function signInWithApple() {
   }
 
   await createUserDocumentIfNeeded(userCredential.user, 'apple');
-
-  return userCredential;
-}
-
-export async function signInWithKakao() {
-  const result = await KakaoLogin.login();
-  const { accessToken } = result;
-  if (!accessToken) {
-    throw new Error('카카오 로그인에서 accessToken을 받지 못했습니다.');
-  }
-
-  const response = await functions().httpsCallable('createKakaoToken')({
-    accessToken,
-  });
-  const { customToken } = response.data as { customToken: string };
-
-  const userCredential = await auth().signInWithCustomToken(customToken);
-
-  await createUserDocumentIfNeeded(userCredential.user, 'kakao');
 
   return userCredential;
 }

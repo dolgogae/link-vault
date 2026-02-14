@@ -1,8 +1,5 @@
 import { onRequest } from 'firebase-functions/v2/https';
 
-// Auth
-export { createKakaoToken } from './auth';
-
 // Link Analysis
 export { analyzeLink } from './analyzeLink';
 export { categorizeLink } from './categorize';
