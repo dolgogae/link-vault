@@ -1,5 +1,6 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import * as cheerio from 'cheerio';
+import * as logger from 'firebase-functions/logger';
 
 export interface LinkMetadata {
   title: string;
@@ -38,8 +39,10 @@ export const analyzeLink = onCall<{ url: string }>(
         signal: controller.signal,
         headers: {
           'User-Agent':
-            'Mozilla/5.0 (compatible; LinkVault/1.0; +https://linkvault.app)',
-          Accept: 'text/html,application/xhtml+xml',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+          Accept:
+            'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
         },
         redirect: 'follow',
       });
@@ -86,11 +89,22 @@ export const analyzeLink = onCall<{ url: string }>(
         bodyText,
       };
     } catch (error: any) {
-      if (error.name === 'AbortError') {
-        throw new HttpsError('deadline-exceeded', '스크래핑 시간 초과 (10초)');
-      }
+      logger.warn('Scraping failed, using fallback metadata', {
+        url,
+        error: error.message,
+      });
+
       if (error instanceof HttpsError) throw error;
-      throw new HttpsError('internal', `스크래핑 오류: ${error.message}`);
+
+      // 스크래핑 실패 시 URL 기반 최소 메타데이터로 폴백
+      metadata = {
+        title: parsedUrl.hostname + decodeURIComponent(parsedUrl.pathname),
+        description: '',
+        ogImage: '',
+        favicon: `${parsedUrl.protocol}//${parsedUrl.host}/favicon.ico`,
+        domain: parsedUrl.hostname,
+        bodyText: `URL: ${url}`,
+      };
     } finally {
       clearTimeout(timeout);
     }
