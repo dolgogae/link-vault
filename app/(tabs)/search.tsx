@@ -66,7 +66,7 @@ export default function SearchScreen() {
 
       {isSearching && (
         <View className="items-center py-8">
-          <ActivityIndicator size="large" color="#2563EB" />
+          <ActivityIndicator size="large" color="#8000C8" />
         </View>
       )}
 

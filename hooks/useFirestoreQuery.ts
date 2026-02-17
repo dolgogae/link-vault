@@ -34,6 +34,7 @@ export function useFirestoreQuery<T>(
         setError(null);
       },
       (err) => {
+        console.error('[useFirestoreQuery] onSnapshot error:', err);
         setError(err as Error);
         setLoading(false);
       },

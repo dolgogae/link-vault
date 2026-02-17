@@ -51,5 +51,8 @@ functions/lib/
 *.swp
 *.swo
 
+# Claude Code
+.claude/
+
 # Misc
 *.log
