@@ -1,12 +1,30 @@
-import { View, Text, Pressable, Alert, ScrollView, Switch } from 'react-native';
+import { useState } from 'react';
+import { View, Text, Pressable, Alert, ScrollView, ActivityIndicator } from 'react-native';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { useColorScheme } from '@/components/useColorScheme';
+import { router } from 'expo-router';
 import { useAuthStore } from '@/stores/authStore';
 import { signOut, deleteAccount } from '@/services/auth';
+import { runCleanupManual } from '@/services/categories';
+import Constants from 'expo-constants';
 
 export default function SettingsScreen() {
   const { user } = useAuthStore();
-  const colorScheme = useColorScheme();
+  const [isCleaning, setIsCleaning] = useState(false);
+
+  const handleCleanup = async () => {
+    setIsCleaning(true);
+    try {
+      const result = await runCleanupManual();
+      Alert.alert(
+        '정리 완료',
+        `이모지 제거: ${result.cleanedCount}건\n중복 병합: ${result.mergedCount}건`,
+      );
+    } catch (error: any) {
+      Alert.alert('오류', error.message || '데이터 정리에 실패했습니다.');
+    } finally {
+      setIsCleaning(false);
+    }
+  };
 
   const handleSignOut = () => {
     Alert.alert('로그아웃', '정말 로그아웃하시겠습니까?', [
@@ -45,7 +63,7 @@ export default function SettingsScreen() {
     <ScrollView className="flex-1 bg-background dark:bg-background-dark">
       <View className="items-center pt-6 pb-8">
         <View className="w-16 h-16 rounded-full bg-primary/10 items-center justify-center mb-3">
-          <FontAwesome name="user" size={28} color="#2563EB" />
+          <FontAwesome name="user" size={28} color="#8000C8" />
         </View>
         <Text className="text-lg font-semibold text-text dark:text-text-dark">
           {user?.displayName || '사용자'}
@@ -55,22 +73,34 @@ export default function SettingsScreen() {
         </Text>
       </View>
 
-      <SectionHeader title="일반" />
+      <SectionHeader title="정보" />
       <SettingRow
-        icon="moon-o"
-        label="다크 모드"
+        icon="info-circle"
+        label="버전"
+        value={Constants.expoConfig?.version ?? '1.0.0'}
+      />
+      <SettingRow
+        icon="shield"
+        label="개인정보처리방침"
+        onPress={() => router.push('/privacy')}
+      />
+      <SettingRow
+        icon="file-text-o"
+        label="이용약관"
+        onPress={() => router.push('/terms')}
+      />
+
+      <SectionHeader title="데이터" />
+      <SettingRow
+        icon="magic"
+        label="폴더 데이터 정리"
+        onPress={handleCleanup}
         right={
-          <Text className="text-sm text-text-secondary dark:text-text-dark-secondary">
-            {colorScheme === 'dark' ? '켜짐' : '꺼짐'} (시스템 연동)
-          </Text>
+          isCleaning ? (
+            <ActivityIndicator size="small" color="#8000C8" />
+          ) : undefined
         }
       />
-      <SettingRow icon="external-link" label="링크 열기 방식" value="인앱 브라우저" />
-
-      <SectionHeader title="정보" />
-      <SettingRow icon="info-circle" label="버전" value="1.0.0" />
-      <SettingRow icon="shield" label="개인정보처리방침" />
-      <SettingRow icon="file-text-o" label="이용약관" />
 
       <SectionHeader title="계정" />
       <SettingRow icon="sign-out" label="로그아웃" onPress={handleSignOut} />
