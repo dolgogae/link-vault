@@ -2,6 +2,7 @@ import firestore from '@react-native-firebase/firestore';
 import { getFunctions, httpsCallable } from '@react-native-firebase/functions';
 import { Link } from '@/types';
 import { getUserRef, getLinksRef, getCategoriesRef } from '@/utils/firestore';
+import { pruneEmptyAncestors } from '@/services/categories';
 
 export async function analyzeAndSaveLink(url: string): Promise<{
   linkId: string;
@@ -84,6 +85,9 @@ export async function deleteLink(userId: string, linkId: string, categoryPath: s
   });
 
   await batch.commit();
+
+  // 빈 폴더 자동 정리 (리프 → 루트 방향)
+  await pruneEmptyAncestors(userId, categoryPath);
 }
 
 export async function moveLink(

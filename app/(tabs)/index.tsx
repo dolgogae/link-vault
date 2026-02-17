@@ -195,6 +195,12 @@ export default function HomeScreen() {
         onPress: async () => {
           try {
             await deleteLink(userId, link.id, link.categoryPath);
+            setRefreshKey((k) => k + 1);
+            // 현재 폴더가 빈 폴더 정리로 삭제됐을 수 있으므로 루트로 복귀
+            if (currentCategoryId && link.categoryPath.includes(currentCategoryId)) {
+              setCurrentCategoryId(null);
+              setBreadcrumb([]);
+            }
           } catch {
             Alert.alert('오류', '링크 삭제에 실패했습니다.');
           }

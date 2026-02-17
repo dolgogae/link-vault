@@ -211,6 +211,19 @@ export async function deleteCategory(
   }
 
   await batch.commit();
+
+  // 부모 체인에서 빈 폴더 자동 정리
+  if (parentId) {
+    // 삭제된 카테고리의 조상 경로를 수집
+    const ancestorIds: string[] = [];
+    let currentId: string | null = parentId;
+    while (currentId) {
+      ancestorIds.unshift(currentId);
+      const doc = await getCategoriesRef(userId).doc(currentId).get();
+      currentId = doc.data()?.parentId ?? null;
+    }
+    await pruneEmptyAncestors(userId, ancestorIds);
+  }
 }
 
 async function collectDescendantIds(
@@ -228,6 +241,41 @@ async function collectDescendantIds(
     ids.push(...grandchildren);
   }
   return ids;
+}
+
+/**
+ * 리프에서 루트 방향으로 빈 카테고리를 자동 삭제
+ * - 링크도 없고 하위 카테고리도 없는 폴더를 정리
+ * - 상위로 올라가며 연쇄 삭제
+ */
+export async function pruneEmptyAncestors(
+  userId: string,
+  categoryIds: string[],
+) {
+  // 리프(마지막)부터 루트(처음) 방향으로 순회
+  for (let i = categoryIds.length - 1; i >= 0; i--) {
+    const catId = categoryIds[i];
+
+    const catDoc = await getCategoriesRef(userId).doc(catId).get();
+    if (!catDoc.exists) continue; // 이미 삭제됨
+
+    // 하위 링크가 있는지 확인
+    const links = await getLinksRef(userId)
+      .where('categoryPath', 'array-contains', catId)
+      .limit(1)
+      .get();
+    if (!links.empty) break; // 링크 있으면 여기서 중단
+
+    // 하위 카테고리가 있는지 확인
+    const children = await getCategoriesRef(userId)
+      .where('parentId', '==', catId)
+      .limit(1)
+      .get();
+    if (!children.empty) break; // 하위 폴더 있으면 중단
+
+    // 비어있으므로 삭제
+    await getCategoriesRef(userId).doc(catId).delete();
+  }
 }
 
 export async function reorderCategories(
