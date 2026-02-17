@@ -1,21 +1,29 @@
 import firestore from '@react-native-firebase/firestore';
-import functions from '@react-native-firebase/functions';
+import { getFunctions, httpsCallable } from '@react-native-firebase/functions';
 import { Link } from '@/types';
 import { getUserRef, getLinksRef, getCategoriesRef } from '@/utils/firestore';
 
 export async function analyzeAndSaveLink(url: string): Promise<{
   linkId: string;
   categoryPath: string[];
+  categoryIds: string[];
 }> {
-  const analyzeResult = await functions().httpsCallable('analyzeLink')({ url });
-  const metadata = analyzeResult.data as any;
+  const fns = getFunctions();
 
-  const categorizeResult = await functions().httpsCallable('categorizeLink')({
+  console.log('[1/3] analyzeLink 호출 시작:', url);
+  const analyzeResult = await httpsCallable(fns, 'analyzeLink')({ url });
+  const metadata = analyzeResult.data as any;
+  console.log('[1/3] analyzeLink 성공:', metadata.title);
+
+  console.log('[2/3] categorizeLink 호출 시작');
+  const categorizeResult = await httpsCallable(fns, 'categorizeLink')({
     metadata,
   });
   const classification = categorizeResult.data as any;
+  console.log('[2/3] categorizeLink 성공:', classification.categoryPath);
 
-  const saveResult = await functions().httpsCallable('saveLink')({
+  console.log('[3/3] saveLink 호출 시작');
+  const saveResult = await httpsCallable(fns, 'saveLink')({
     url,
     title: metadata.title,
     description: metadata.description,
@@ -27,8 +35,10 @@ export async function analyzeAndSaveLink(url: string): Promise<{
     tags: classification.tags,
     icon: classification.icon,
   });
+  console.log('[3/3] saveLink 성공');
 
-  return saveResult.data as { linkId: string; categoryPath: string[] };
+  const saveData = saveResult.data as { linkId: string; categoryPath: string[] };
+  return { ...saveData, categoryIds: classification.categoryIds };
 }
 
 export function getLinksQuery(
@@ -63,9 +73,8 @@ export async function deleteLink(userId: string, linkId: string, categoryPath: s
 
   batch.delete(getLinksRef(userId).doc(linkId));
 
-  if (categoryPath.length > 0) {
-    const lastCatId = categoryPath[categoryPath.length - 1];
-    batch.update(getCategoriesRef(userId).doc(lastCatId), {
+  for (const catId of categoryPath) {
+    batch.update(getCategoriesRef(userId).doc(catId), {
       linkCount: firestore.FieldValue.increment(-1),
     });
   }
@@ -87,16 +96,16 @@ export async function moveLink(
 
   batch.update(getLinksRef(userId).doc(linkId), { categoryPath: newCategoryPath });
 
-  if (oldCategoryPath.length > 0) {
+  for (const catId of oldCategoryPath) {
     batch.update(
-      getCategoriesRef(userId).doc(oldCategoryPath[oldCategoryPath.length - 1]),
+      getCategoriesRef(userId).doc(catId),
       { linkCount: firestore.FieldValue.increment(-1) },
     );
   }
 
-  if (newCategoryPath.length > 0) {
+  for (const catId of newCategoryPath) {
     batch.update(
-      getCategoriesRef(userId).doc(newCategoryPath[newCategoryPath.length - 1]),
+      getCategoriesRef(userId).doc(catId),
       { linkCount: firestore.FieldValue.increment(1) },
     );
   }
