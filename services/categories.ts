@@ -1,35 +1,61 @@
-import firestore, { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
+import {
+  getFirestore,
+  doc,
+  query,
+  where,
+  orderBy,
+  limit,
+  getDoc,
+  getDocFromServer,
+  getDocs,
+  getDocsFromServer,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  addDoc,
+  writeBatch,
+  increment,
+  serverTimestamp,
+} from '@react-native-firebase/firestore';
 import { getFunctions, httpsCallable } from '@react-native-firebase/functions';
 import { Category } from '@/types';
 import { getCategoriesRef, getLinksRef, getUserRef, convertTimestamp } from '@/utils/firestore';
 
+type DocData = Record<string, any>;
+
 export function getRootCategoriesQuery(userId: string) {
-  return getCategoriesRef(userId)
-    .where('parentId', '==', null)
-    .orderBy('order');
+  return query(
+    getCategoriesRef(userId),
+    where('parentId', '==', null),
+    orderBy('order'),
+  );
 }
 
 export function getChildCategoriesQuery(userId: string, parentId: string) {
-  return getCategoriesRef(userId)
-    .where('parentId', '==', parentId)
-    .orderBy('order');
+  return query(
+    getCategoriesRef(userId),
+    where('parentId', '==', parentId),
+    orderBy('order'),
+  );
 }
 
 export function getAllCategoriesQuery(userId: string) {
-  return getCategoriesRef(userId).orderBy('depth').orderBy('order');
+  return query(
+    getCategoriesRef(userId),
+    orderBy('depth'),
+    orderBy('order'),
+  );
 }
 
 export async function getAllCategories(userId: string): Promise<Category[]> {
-  const snapshot = await getCategoriesRef(userId)
-    .orderBy('depth')
-    .orderBy('order')
-    .get();
+  const snapshot = await getDocs(
+    query(getCategoriesRef(userId), orderBy('depth'), orderBy('order')),
+  );
 
-  return snapshot.docs.map((doc) => ({
-    id: doc.id,
-    ...doc.data(),
-    createdAt: convertTimestamp(doc.data().createdAt),
-  })) as Category[];
+  return snapshot.docs.map((d: { id: string; data: () => DocData }) => {
+    const data = d.data();
+    return { id: d.id, ...data, createdAt: convertTimestamp(data.createdAt) };
+  }) as Category[];
 }
 
 export async function createCategory(
@@ -41,22 +67,25 @@ export async function createCategory(
     icon: string;
   },
 ): Promise<string> {
-  const siblings = await getCategoriesRef(userId)
-    .where('parentId', '==', data.parentId)
-    .orderBy('order', 'desc')
-    .limit(1)
-    .get();
+  const siblings = await getDocs(
+    query(
+      getCategoriesRef(userId),
+      where('parentId', '==', data.parentId),
+      orderBy('order', 'desc'),
+      limit(1),
+    ),
+  );
 
-  const maxOrder = siblings.empty ? 0 : (siblings.docs[0].data().order || 0) + 1;
+  const maxOrder = siblings.empty ? 0 : ((siblings.docs[0].data() as DocData).order || 0) + 1;
 
-  const docRef = await getCategoriesRef(userId).add({
+  const docRef = await addDoc(getCategoriesRef(userId), {
     name: data.name,
     parentId: data.parentId,
     depth: data.depth,
     order: maxOrder,
     linkCount: 0,
     icon: data.icon,
-    createdAt: firestore.FieldValue.serverTimestamp(),
+    createdAt: serverTimestamp(),
   });
 
   return docRef.id;
@@ -67,21 +96,29 @@ export async function renameCategory(
   categoryId: string,
   newName: string,
 ): Promise<{ merged: boolean; targetId?: string }> {
-  const catDoc = await getCategoriesRef(userId).doc(categoryId).get();
-  const catData = catDoc.data();
+  const catDoc = await getDoc(doc(getCategoriesRef(userId), categoryId));
+  const catData = catDoc.data() as DocData | undefined;
   if (!catData) throw new Error('카테고리를 찾을 수 없습니다.');
 
   // 같은 부모 아래 동일한 이름의 형제 카테고리가 있는지 확인
-  const parentId = catData.parentId ?? null;
-  let siblingQuery = getCategoriesRef(userId).where('name', '==', newName);
+  const parentId: string | null = catData.parentId ?? null;
+  let siblingQuery;
   if (parentId !== null) {
-    siblingQuery = siblingQuery.where('parentId', '==', parentId);
+    siblingQuery = query(
+      getCategoriesRef(userId),
+      where('name', '==', newName),
+      where('parentId', '==', parentId),
+    );
   } else {
-    siblingQuery = siblingQuery.where('parentId', '==', null);
+    siblingQuery = query(
+      getCategoriesRef(userId),
+      where('name', '==', newName),
+      where('parentId', '==', null),
+    );
   }
 
-  const siblings = await siblingQuery.get();
-  const existingSibling = siblings.docs.find((doc) => doc.id !== categoryId);
+  const siblings = await getDocs(siblingQuery);
+  const existingSibling = siblings.docs.find((d: { id: string }) => d.id !== categoryId);
 
   if (existingSibling) {
     // 동일 이름의 형제가 있으면 병합
@@ -89,7 +126,7 @@ export async function renameCategory(
     return { merged: true, targetId: existingSibling.id };
   }
 
-  await getCategoriesRef(userId).doc(categoryId).update({ name: newName });
+  await updateDoc(doc(getCategoriesRef(userId), categoryId), { name: newName });
   return { merged: false };
 }
 
@@ -101,45 +138,46 @@ async function mergeCategories(
   sourceId: string,
   targetId: string,
 ) {
-  const batch = firestore().batch();
+  const db = getFirestore();
+  const batch = writeBatch(db);
 
   // 1. source의 하위 카테고리를 target 아래로 이동
-  const children = await getCategoriesRef(userId)
-    .where('parentId', '==', sourceId)
-    .get();
+  const children = await getDocs(
+    query(getCategoriesRef(userId), where('parentId', '==', sourceId)),
+  );
 
-  for (const doc of children.docs) {
-    batch.update(doc.ref, { parentId: targetId });
+  for (const childDoc of children.docs) {
+    batch.update(childDoc.ref, { parentId: targetId });
   }
 
   // 2. source에 속한 링크의 categoryPath에서 sourceId → targetId 교체
-  const links = await getLinksRef(userId)
-    .where('categoryPath', 'array-contains', sourceId)
-    .get();
+  const links = await getDocs(
+    query(getLinksRef(userId), where('categoryPath', 'array-contains', sourceId)),
+  );
 
-  for (const doc of links.docs) {
-    const currentPath: string[] = doc.data().categoryPath;
-    const newPath = currentPath.map((id) => (id === sourceId ? targetId : id));
-    batch.update(doc.ref, { categoryPath: newPath });
+  for (const linkDoc of links.docs) {
+    const currentPath: string[] = (linkDoc.data() as DocData).categoryPath;
+    const newPath = currentPath.map((id: string) => (id === sourceId ? targetId : id));
+    batch.update(linkDoc.ref, { categoryPath: newPath });
   }
 
   // 3. source의 linkCount를 target에 합산
-  const sourceDoc = await getCategoriesRef(userId).doc(sourceId).get();
-  const sourceLinkCount = sourceDoc.data()?.linkCount || 0;
+  const sourceDoc = await getDoc(doc(getCategoriesRef(userId), sourceId));
+  const sourceLinkCount = (sourceDoc.data() as DocData | undefined)?.linkCount || 0;
   if (sourceLinkCount > 0) {
-    batch.update(getCategoriesRef(userId).doc(targetId), {
-      linkCount: firestore.FieldValue.increment(sourceLinkCount),
+    batch.update(doc(getCategoriesRef(userId), targetId), {
+      linkCount: increment(sourceLinkCount),
     });
   }
 
   // 4. source 삭제
-  batch.delete(getCategoriesRef(userId).doc(sourceId));
+  batch.delete(doc(getCategoriesRef(userId), sourceId));
 
   await batch.commit();
 }
 
 export async function updateCategoryIcon(userId: string, categoryId: string, icon: string) {
-  await getCategoriesRef(userId).doc(categoryId).update({ icon });
+  await updateDoc(doc(getCategoriesRef(userId), categoryId), { icon });
 }
 
 /**
@@ -151,7 +189,8 @@ export async function deleteCategory(
   parentId: string | null,
   moveToParent: boolean,
 ) {
-  const batch = firestore().batch();
+  const db = getFirestore();
+  const batch = writeBatch(db);
 
   // 모든 하위 카테고리를 재귀적으로 수집
   const allDescendantIds = await collectDescendantIds(userId, categoryId);
@@ -160,52 +199,51 @@ export async function deleteCategory(
   const allCategoryIds = [categoryId, ...allDescendantIds];
 
   // 해당 카테고리 및 모든 하위 카테고리에 속한 링크 수집
-  const linkDocs: FirebaseFirestoreTypes.QueryDocumentSnapshot[] = [];
+  const linkDocs: Array<{ id: string; ref: any; data: () => DocData }> = [];
   for (const catId of allCategoryIds) {
-    const links = await getLinksRef(userId)
-      .where('categoryPath', 'array-contains', catId)
-      .get();
-    links.docs.forEach((doc) => {
-      // 중복 방지
-      if (!linkDocs.some((d) => d.id === doc.id)) {
-        linkDocs.push(doc);
+    const links = await getDocs(
+      query(getLinksRef(userId), where('categoryPath', 'array-contains', catId)),
+    );
+    for (const linkDoc of links.docs) {
+      if (!linkDocs.some((ld) => ld.id === linkDoc.id)) {
+        linkDocs.push({ id: linkDoc.id, ref: linkDoc.ref, data: () => linkDoc.data() as DocData });
       }
-    });
+    }
   }
 
   if (moveToParent && parentId) {
     // 직접 자식만 상위로 이동
-    const directChildren = await getCategoriesRef(userId)
-      .where('parentId', '==', categoryId)
-      .get();
+    const directChildren = await getDocs(
+      query(getCategoriesRef(userId), where('parentId', '==', categoryId)),
+    );
 
-    linkDocs.forEach((doc) => {
-      const currentPath: string[] = doc.data().categoryPath;
-      const newPath = currentPath.filter((id) => id !== categoryId);
-      batch.update(doc.ref, { categoryPath: newPath });
-    });
+    for (const ld of linkDocs) {
+      const currentPath: string[] = ld.data().categoryPath;
+      const newPath = currentPath.filter((id: string) => id !== categoryId);
+      batch.update(ld.ref, { categoryPath: newPath });
+    }
 
-    directChildren.docs.forEach((doc) => {
-      batch.update(doc.ref, {
+    for (const childDoc of directChildren.docs) {
+      batch.update(childDoc.ref, {
         parentId,
-        depth: firestore.FieldValue.increment(-1),
+        depth: increment(-1),
       });
-    });
+    }
 
-    batch.delete(getCategoriesRef(userId).doc(categoryId));
+    batch.delete(doc(getCategoriesRef(userId), categoryId));
   } else {
     // 모든 링크 삭제
-    linkDocs.forEach((doc) => batch.delete(doc.ref));
+    for (const ld of linkDocs) batch.delete(ld.ref);
 
     // 모든 하위 카테고리 삭제
     for (const catId of allCategoryIds) {
-      batch.delete(getCategoriesRef(userId).doc(catId));
+      batch.delete(doc(getCategoriesRef(userId), catId));
     }
 
     // 사용자 linkCount 감소
     if (linkDocs.length > 0) {
       batch.update(getUserRef(userId), {
-        linkCount: firestore.FieldValue.increment(-linkDocs.length),
+        linkCount: increment(-linkDocs.length),
       });
     }
   }
@@ -219,8 +257,9 @@ export async function deleteCategory(
     let currentId: string | null = parentId;
     while (currentId) {
       ancestorIds.unshift(currentId);
-      const doc = await getCategoriesRef(userId).doc(currentId).get();
-      currentId = doc.data()?.parentId ?? null;
+      const docRef = doc(getCategoriesRef(userId), currentId);
+      const parentData = (await getDoc(docRef)).data() as DocData | undefined;
+      currentId = parentData?.parentId ?? null;
     }
     await pruneEmptyAncestors(userId, ancestorIds);
   }
@@ -230,14 +269,14 @@ async function collectDescendantIds(
   userId: string,
   parentId: string,
 ): Promise<string[]> {
-  const children = await getCategoriesRef(userId)
-    .where('parentId', '==', parentId)
-    .get();
+  const children = await getDocs(
+    query(getCategoriesRef(userId), where('parentId', '==', parentId)),
+  );
 
   const ids: string[] = [];
-  for (const doc of children.docs) {
-    ids.push(doc.id);
-    const grandchildren = await collectDescendantIds(userId, doc.id);
+  for (const childDoc of children.docs) {
+    ids.push(childDoc.id);
+    const grandchildren = await collectDescendantIds(userId, childDoc.id);
     ids.push(...grandchildren);
   }
   return ids;
@@ -245,47 +284,91 @@ async function collectDescendantIds(
 
 /**
  * 리프에서 루트 방향으로 빈 카테고리를 자동 삭제
- * - 링크도 없고 하위 카테고리도 없는 폴더를 정리
+ * - linkCount가 0이고 하위 카테고리도 없는 폴더를 정리
  * - 상위로 올라가며 연쇄 삭제
  */
 export async function pruneEmptyAncestors(
   userId: string,
   categoryIds: string[],
 ) {
-  // 리프(마지막)부터 루트(처음) 방향으로 순회
   for (let i = categoryIds.length - 1; i >= 0; i--) {
     const catId = categoryIds[i];
 
-    const catDoc = await getCategoriesRef(userId).doc(catId).get();
-    if (!catDoc.exists) continue; // 이미 삭제됨
+    // 서버에서 직접 읽어 캐시 이슈 방지
+    const catDoc = await getDocFromServer(doc(getCategoriesRef(userId), catId));
+    if (!catDoc.exists) {
+      continue;
+    }
 
-    // 하위 링크가 있는지 확인
-    const links = await getLinksRef(userId)
-      .where('categoryPath', 'array-contains', catId)
-      .limit(1)
-      .get();
-    if (!links.empty) break; // 링크 있으면 여기서 중단
+    const data = catDoc.data() as DocData;
+    const linkCount = data.linkCount ?? 0;
+    
+    if (linkCount > 0) {
+      break;
+    }
 
     // 하위 카테고리가 있는지 확인
-    const children = await getCategoriesRef(userId)
-      .where('parentId', '==', catId)
-      .limit(1)
-      .get();
-    if (!children.empty) break; // 하위 폴더 있으면 중단
+    const children = await getDocsFromServer(
+      query(
+        getCategoriesRef(userId),
+        where('parentId', '==', catId),
+        limit(1),
+      ),
+    );
+
+    if (!children.empty) {
+      break;
+    }
 
     // 비어있으므로 삭제
-    await getCategoriesRef(userId).doc(catId).delete();
+    await deleteDoc(doc(getCategoriesRef(userId), catId));
   }
+}
+
+/**
+ * 전체 빈 폴더 일괄 삭제 (리프부터 역순으로)
+ * linkCount가 0이고 하위 카테고리도 없는 폴더를 모두 정리
+ */
+export async function pruneAllEmptyCategories(userId: string): Promise<number> {
+  const allCats = await getDocs(
+    query(getCategoriesRef(userId), orderBy('depth', 'desc')),
+  );
+
+  let deletedCount = 0;
+
+  for (const catDoc of allCats.docs) {
+    const data = catDoc.data() as DocData;
+    const linkCount = data.linkCount ?? 0;
+
+    if (linkCount > 0) continue;
+
+    // 하위 카테고리가 있는지 확인
+    const children = await getDocsFromServer(
+      query(
+        getCategoriesRef(userId),
+        where('parentId', '==', catDoc.id),
+        limit(1),
+      ),
+    );
+
+    if (!children.empty) continue;
+
+    await deleteDoc(doc(getCategoriesRef(userId), catDoc.id));
+    deletedCount++;
+  }
+
+  return deletedCount;
 }
 
 export async function reorderCategories(
   userId: string,
   orderedIds: string[],
 ) {
-  const batch = firestore().batch();
+  const db = getFirestore();
+  const batch = writeBatch(db);
 
   orderedIds.forEach((id, index) => {
-    batch.update(getCategoriesRef(userId).doc(id), { order: index });
+    batch.update(doc(getCategoriesRef(userId), id), { order: index });
   });
 
   await batch.commit();
@@ -298,8 +381,8 @@ const CLEANUP_VERSION = 1;
  * 유저 문서의 cleanupVersion으로 1회만 실행
  */
 export async function runCleanupIfNeeded(userId: string): Promise<boolean> {
-  const userDoc = await getUserRef(userId).get();
-  const currentVersion = userDoc.data()?.cleanupVersion || 0;
+  const userDoc = await getDoc(getUserRef(userId));
+  const currentVersion = (userDoc.data() as DocData | undefined)?.cleanupVersion || 0;
 
   if (currentVersion >= CLEANUP_VERSION) {
     return false; // 이미 실행됨
@@ -308,7 +391,8 @@ export async function runCleanupIfNeeded(userId: string): Promise<boolean> {
   try {
     const fns = getFunctions();
     await httpsCallable(fns, 'cleanupCategories')({});
-    await getUserRef(userId).set(
+    await setDoc(
+      getUserRef(userId),
       { cleanupVersion: CLEANUP_VERSION },
       { merge: true },
     );

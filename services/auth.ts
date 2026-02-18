@@ -1,5 +1,22 @@
-import auth from '@react-native-firebase/auth';
-import firestore from '@react-native-firebase/firestore';
+import {
+  getAuth,
+  signInWithCredential,
+  signOut as firebaseSignOut,
+  onAuthStateChanged as firebaseOnAuthStateChanged,
+  GoogleAuthProvider,
+  AppleAuthProvider,
+  FirebaseAuthTypes,
+} from '@react-native-firebase/auth';
+import {
+  getFirestore,
+  doc,
+  collection,
+  getDoc,
+  getDocs,
+  setDoc,
+  deleteDoc,
+  writeBatch,
+} from '@react-native-firebase/firestore';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
@@ -23,8 +40,8 @@ export async function signInWithGoogle() {
     throw new Error('Google 로그인에서 idToken을 받지 못했습니다.');
   }
 
-  const credential = auth.GoogleAuthProvider.credential(idToken);
-  const userCredential = await auth().signInWithCredential(credential);
+  const credential = GoogleAuthProvider.credential(idToken);
+  const userCredential = await signInWithCredential(getAuth(), credential);
 
   await createUserDocumentIfNeeded(userCredential.user, 'google');
 
@@ -51,10 +68,8 @@ export async function signInWithApple() {
     throw new Error('Apple 로그인에서 identityToken을 받지 못했습니다.');
   }
 
-  // RN Firebase 타입에 nonce 파라미터가 누락되어 있으나 런타임에서 정상 동작
-  const credential = (auth.AppleAuthProvider as any).credential(identityToken, rawNonce);
-
-  const userCredential = await auth().signInWithCredential(credential);
+  const credential = (AppleAuthProvider as any).credential(identityToken, rawNonce);
+  const userCredential = await signInWithCredential(getAuth(), credential);
 
   if (appleCredential.fullName) {
     const displayName = [
@@ -78,8 +93,9 @@ async function createUserDocumentIfNeeded(
   user: { uid: string; displayName: string | null; email: string | null },
   provider: User['provider'],
 ) {
-  const userDoc = firestore().collection('users').doc(user.uid);
-  const snapshot = await userDoc.get();
+  const db = getFirestore();
+  const userRef = doc(db, 'users', user.uid);
+  const snapshot = await getDoc(userRef);
 
   if (!snapshot.exists) {
     const userData: User = {
@@ -90,7 +106,7 @@ async function createUserDocumentIfNeeded(
       linkCount: 0,
       plan: 'free',
     };
-    await userDoc.set(userData);
+    await setDoc(userRef, userData);
   }
 }
 
@@ -101,34 +117,35 @@ export async function signOut() {
     // Google Sign-In이 아닌 경우 무시
   }
 
-  await auth().signOut();
+  await firebaseSignOut(getAuth());
 }
 
 export async function deleteAccount() {
-  const user = auth().currentUser;
+  const user = getAuth().currentUser;
   if (!user) throw new Error('로그인 상태가 아닙니다.');
 
-  const userRef = firestore().collection('users').doc(user.uid);
+  const db = getFirestore();
+  const userRef = doc(db, 'users', user.uid);
 
-  const links = await userRef.collection('links').get();
-  const linkBatch = firestore().batch();
-  links.docs.forEach((doc) => linkBatch.delete(doc.ref));
+  const links = await getDocs(collection(db, 'users', user.uid, 'links'));
+  const linkBatch = writeBatch(db);
+  for (const linkDoc of links.docs) linkBatch.delete(linkDoc.ref);
   if (!links.empty) await linkBatch.commit();
 
-  const categories = await userRef.collection('categories').get();
-  const catBatch = firestore().batch();
-  categories.docs.forEach((doc) => catBatch.delete(doc.ref));
+  const categories = await getDocs(collection(db, 'users', user.uid, 'categories'));
+  const catBatch = writeBatch(db);
+  for (const catDoc of categories.docs) catBatch.delete(catDoc.ref);
   if (!categories.empty) await catBatch.commit();
 
-  await userRef.delete();
+  await deleteDoc(userRef);
 
   await user.delete();
 }
 
 export function onAuthStateChanged(
-  callback: (user: import('@react-native-firebase/auth').FirebaseAuthTypes.User | null) => void,
+  callback: (user: FirebaseAuthTypes.User | null) => void,
 ) {
-  return auth().onAuthStateChanged(callback);
+  return firebaseOnAuthStateChanged(getAuth(), callback);
 }
 
 function generateNonce(length: number): string {
