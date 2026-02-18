@@ -10,6 +10,7 @@ interface LinkCardProps {
   onPress: (link: Link) => void;
   onFavoritePress?: (link: Link) => void;
   onDeletePress?: (link: Link) => void;
+  onMovePress?: (link: Link) => void;
   onLongPress?: (link: Link) => void;
   viewMode?: 'list' | 'card';
   selected?: boolean;
@@ -20,6 +21,7 @@ export function LinkCard({
   onPress,
   onFavoritePress,
   onDeletePress,
+  onMovePress,
   onLongPress,
   viewMode = 'list',
   selected = false,
@@ -90,30 +92,46 @@ export function LinkCard({
     );
   }
 
-  // List mode — 스와이프로 삭제
+  // List mode — 스와이프로 이동/삭제
   const renderRightActions = (
     _progress: Animated.AnimatedInterpolation<number>,
     dragX: Animated.AnimatedInterpolation<number>,
   ) => {
     const scale = dragX.interpolate({
-      inputRange: [-80, 0],
-      outputRange: [1, 0.5],
+      inputRange: [-160, -80, 0],
+      outputRange: [1, 1, 0.5],
       extrapolate: 'clamp',
     });
 
     return (
-      <Pressable
-        onPress={() => {
-          swipeableRef.current?.close();
-          onDeletePress?.(link);
-        }}
-        className="bg-red-500 w-20 items-center justify-center"
-      >
-        <Animated.View style={{ transform: [{ scale }] }} className="items-center">
-          <FontAwesome name="trash-o" size={20} color="#FFFFFF" />
-          <Text className="text-white text-xs mt-1 font-medium">삭제</Text>
-        </Animated.View>
-      </Pressable>
+      <View className="flex-row">
+        {onMovePress && (
+          <Pressable
+            onPress={() => {
+              swipeableRef.current?.close();
+              onMovePress(link);
+            }}
+            className="bg-blue-500 w-20 items-center justify-center"
+          >
+            <Animated.View style={{ transform: [{ scale }] }} className="items-center">
+              <FontAwesome name="folder-open-o" size={18} color="#FFFFFF" />
+              <Text className="text-white text-xs mt-1 font-medium">이동</Text>
+            </Animated.View>
+          </Pressable>
+        )}
+        <Pressable
+          onPress={() => {
+            swipeableRef.current?.close();
+            onDeletePress?.(link);
+          }}
+          className="bg-red-500 w-20 items-center justify-center"
+        >
+          <Animated.View style={{ transform: [{ scale }] }} className="items-center">
+            <FontAwesome name="trash-o" size={20} color="#FFFFFF" />
+            <Text className="text-white text-xs mt-1 font-medium">삭제</Text>
+          </Animated.View>
+        </Pressable>
+      </View>
     );
   };
 

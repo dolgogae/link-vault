@@ -5,11 +5,12 @@ import { useNavigation } from 'expo-router';
 
 import { useAuthStore } from '@/stores/authStore';
 import { useFirestoreQuery } from '@/hooks/useFirestoreQuery';
-import { getRootCategoriesQuery, getChildCategoriesQuery, renameCategory, deleteCategory as deleteCategoryService, runCleanupIfNeeded } from '@/services/categories';
-import { getLinksQuery, toggleFavorite, deleteLink } from '@/services/links';
+import { getRootCategoriesQuery, getChildCategoriesQuery, renameCategory, deleteCategory as deleteCategoryService, runCleanupIfNeeded, pruneAllEmptyCategories } from '@/services/categories';
+import { getLinksQuery, toggleFavorite, deleteLink, moveLink } from '@/services/links';
 import { CategoryFolder } from '@/components/CategoryFolder';
 import { LinkCard } from '@/components/LinkCard';
 import { AddLinkModal } from '@/components/AddLinkModal';
+import { MoveLinkModal } from '@/components/MoveLinkModal';
 import { RenameToast } from '@/components/RenameToast';
 import { AdBanner } from '@/components/AdBanner';
 import { EmptyState } from '@/components/EmptyState';
@@ -28,6 +29,7 @@ export default function HomeScreen() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [showRenameToast, setShowRenameToast] = useState(false);
+  const [movingLink, setMovingLink] = useState<Link | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
   useInterstitialAd();
@@ -42,18 +44,33 @@ export default function HomeScreen() {
 
   const navigation = useNavigation();
 
+  const handlePruneEmpty = useCallback(() => {
+    Alert.alert('빈 폴더 정리', '링크가 없는 빈 폴더를 모두 삭제합니다.', [
+      { text: '취소', style: 'cancel' },
+      {
+        text: '정리',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            const count = await pruneAllEmptyCategories(userId);
+            if (count > 0) {
+              Alert.alert('완료', `빈 폴더 ${count}개를 삭제했습니다.`);
+              setCurrentCategoryId(null);
+              setBreadcrumb([]);
+              setRefreshKey((k) => k + 1);
+            } else {
+              Alert.alert('완료', '삭제할 빈 폴더가 없습니다.');
+            }
+          } catch {
+            Alert.alert('오류', '폴더 정리에 실패했습니다.');
+          }
+        },
+      },
+    ]);
+  }, [userId]);
+
   useLayoutEffect(() => {
-    navigation.setOptions({
-      headerRight: () => (
-        <Pressable
-          onPress={() => setShowAddModal(true)}
-          hitSlop={12}
-          className="mr-4 w-8 h-8 items-center justify-center"
-        >
-          <FontAwesome name="plus" size={20} color="#8000C8" />
-        </Pressable>
-      ),
-    });
+    navigation.setOptions({ headerRight: () => null });
   }, [navigation]);
 
   // 현재 레벨의 하위 카테고리
@@ -92,9 +109,6 @@ export default function HomeScreen() {
 
   // 디버그
   useEffect(() => {
-    console.log(
-      `[Home] 현재폴더: ${currentCategoryId || 'root'}, 하위폴더: ${childCategories.length}건, 링크: ${currentLinks.length}건`,
-    );
     if (catError) console.error('[Home] catError:', catError.message);
     if (linkError) console.error('[Home] linkError:', linkError.message);
   }, [childCategories, currentLinks, catError, linkError, currentCategoryId]);
@@ -209,6 +223,16 @@ export default function HomeScreen() {
     ]);
   };
 
+  const handleMoveLink = async (link: Link, newCategoryPath: string[]) => {
+    try {
+      await moveLink(userId, link.id, link.categoryPath, newCategoryPath);
+      setMovingLink(null);
+      setRefreshKey((k) => k + 1);
+    } catch {
+      Alert.alert('오류', '링크 이동에 실패했습니다.');
+    }
+  };
+
   const isLoading = loadingCats || loadingLinks;
   const hasError = catError || linkError;
   const isEmpty = childCategories.length === 0 && currentLinks.length === 0;
@@ -235,22 +259,22 @@ export default function HomeScreen() {
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4, alignItems: 'center' }}
+                contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 14, paddingBottom: 6, alignItems: 'center' }}
               >
                 <Pressable
                   onPress={() => navigateTo(-1)}
-                  className="flex-row items-center h-9 px-3 rounded-full bg-surface dark:bg-surface-dark mr-1.5"
+                  className="flex-row items-center h-10 px-3.5 rounded-full bg-surface dark:bg-surface-dark mr-1.5"
                 >
-                  <FontAwesome name="home" size={14} color="#8000C8" />
+                  <FontAwesome name="home" size={15} color="#8000C8" />
                 </Pressable>
                 {breadcrumb.map((crumb, index) => {
                   const isLast = index === breadcrumb.length - 1;
                   return (
-                    <View key={crumb.id} className="flex-row items-center">
-                      <FontAwesome name="chevron-right" size={10} color="#9CA3AF" style={{ marginHorizontal: 4 }} />
+                    <View key={`${crumb.id}-${index}`} className="flex-row items-center">
+                      <FontAwesome name="chevron-right" size={10} color="#9CA3AF" style={{ marginHorizontal: 6 }} />
                       <Pressable
                         onPress={isLast ? undefined : () => navigateTo(index)}
-                        className={`h-9 px-3.5 rounded-full items-center justify-center ${
+                        className={`h-10 px-4 rounded-full items-center justify-center ${
                           isLast
                             ? 'bg-primary'
                             : 'bg-surface dark:bg-surface-dark'
@@ -277,7 +301,7 @@ export default function HomeScreen() {
             {hasError && (
               <Pressable
                 onPress={() => setRefreshKey((k) => k + 1)}
-                className="mx-5 mt-3 mb-1 p-3.5 bg-red-50 dark:bg-red-900/20 rounded-xl"
+                className="mx-6 mt-3 mb-1 p-3.5 bg-red-50 dark:bg-red-900/20 rounded-xl"
               >
                 <Text className="text-red-600 dark:text-red-400 text-sm">
                   데이터를 불러오지 못했습니다. 탭하여 다시 시도
@@ -288,23 +312,38 @@ export default function HomeScreen() {
               </Pressable>
             )}
 
-            {/* 폴더 아이콘 그리드 */}
+            {/* 폴더 섹션 */}
             {childCategories.length > 0 && (
-              <View className="flex-row flex-wrap px-4 pt-5">
-                {childCategories.map((cat) => (
-                  <CategoryFolder
-                    key={cat.id}
-                    category={cat}
-                    onPress={navigateInto}
-                    onLongPress={handleCategoryLongPress}
-                  />
-                ))}
+              <View className="pt-5">
+                <View className="flex-row items-center justify-between px-6 mb-3">
+                  <Text className="text-sm font-semibold text-text-secondary dark:text-text-dark-secondary">
+                    폴더
+                  </Text>
+                  <Pressable
+                    onPress={handlePruneEmpty}
+                    className="py-1.5 px-3 rounded-lg active:bg-surface dark:active:bg-surface-dark"
+                  >
+                    <Text className="text-sm text-text-secondary/60 dark:text-text-dark-secondary/60">
+                      빈폴더 정리
+                    </Text>
+                  </Pressable>
+                </View>
+                <View className="flex-row flex-wrap px-5">
+                  {childCategories.map((cat) => (
+                    <CategoryFolder
+                      key={cat.id}
+                      category={cat}
+                      onPress={navigateInto}
+                      onLongPress={handleCategoryLongPress}
+                    />
+                  ))}
+                </View>
               </View>
             )}
 
             {/* 링크 섹션 구분 */}
             {currentLinks.length > 0 && childCategories.length > 0 && (
-              <View className="h-px bg-surface dark:bg-surface-dark mx-5 mt-1 mb-2" />
+              <View className="h-px bg-surface dark:bg-surface-dark mx-6 mt-2 mb-2" />
             )}
           </>
         }
@@ -336,10 +375,26 @@ export default function HomeScreen() {
             onPress={handleLinkPress}
             onFavoritePress={handleFavoritePress}
             onDeletePress={handleDeleteLink}
+            onMovePress={(l) => setMovingLink(l)}
             viewMode="list"
           />
         )}
       />
+
+      {/* FAB — 링크 추가 */}
+      <Pressable
+        onPress={() => setShowAddModal(true)}
+        className="absolute bottom-24 right-5 w-14 h-14 rounded-full bg-primary items-center justify-center active:bg-primary/80"
+        style={{
+          shadowColor: '#8000C8',
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.3,
+          shadowRadius: 8,
+          elevation: 6,
+        }}
+      >
+        <FontAwesome name="plus" size={22} color="#FFFFFF" />
+      </Pressable>
 
       <AddLinkModal
         visible={showAddModal}
@@ -354,6 +409,13 @@ export default function HomeScreen() {
             );
           }
         }}
+      />
+
+      <MoveLinkModal
+        visible={!!movingLink}
+        link={movingLink}
+        onMove={handleMoveLink}
+        onClose={() => setMovingLink(null)}
       />
 
       <RenameToast
