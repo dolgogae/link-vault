@@ -11,6 +11,47 @@ export interface LinkMetadata {
   bodyText: string;
 }
 
+// oEmbed로 플랫폼 콘텐츠의 실제 제목/설명 보강
+const OEMBED_PLATFORMS: Record<string, (url: string) => string> = {
+  'youtube.com': (url) =>
+    `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`,
+  'youtu.be': (url) =>
+    `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`,
+  'instagram.com': (url) =>
+    `https://noembed.com/embed?url=${encodeURIComponent(url)}`,
+  'twitter.com': (url) =>
+    `https://noembed.com/embed?url=${encodeURIComponent(url)}`,
+  'x.com': (url) =>
+    `https://noembed.com/embed?url=${encodeURIComponent(url)}`,
+  'tiktok.com': (url) =>
+    `https://www.tiktok.com/oembed?url=${encodeURIComponent(url)}`,
+};
+
+async function fetchOEmbed(
+  url: string,
+  domain: string,
+): Promise<{ title?: string; authorName?: string; html?: string } | null> {
+  const key = Object.keys(OEMBED_PLATFORMS).find((k) => domain.includes(k));
+  if (!key) return null;
+
+  try {
+    const oembedUrl = OEMBED_PLATFORMS[key](url);
+    const res = await fetch(oembedUrl, {
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!res.ok) return null;
+
+    const data = await res.json();
+    return {
+      title: data.title,
+      authorName: data.author_name,
+      html: data.html,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export const analyzeLink = onCall<{ url: string }>(
   { timeoutSeconds: 30, memory: '256MiB' },
   async (request) => {
@@ -107,6 +148,34 @@ export const analyzeLink = onCall<{ url: string }>(
       };
     } finally {
       clearTimeout(timeout);
+    }
+
+    // 소셜/동영상 플랫폼은 oEmbed로 메타데이터 보강
+    const oembed = await fetchOEmbed(url, parsedUrl.hostname);
+    if (oembed) {
+      logger.info('oEmbed data fetched', { domain: parsedUrl.hostname, oembed });
+
+      // 제목이 제네릭하면 oEmbed 제목으로 교체
+      const genericTitles = ['instagram', 'youtube', 'tiktok', 'x.com', 'twitter'];
+      const isGenericTitle =
+        !metadata.title ||
+        genericTitles.some((g) => metadata.title.toLowerCase().includes(g) && metadata.title.length < 40);
+
+      if (isGenericTitle && oembed.title) {
+        metadata.title = oembed.title;
+      }
+
+      // 작성자 정보를 본문에 추가
+      const extra: string[] = [];
+      if (oembed.title && oembed.title !== metadata.title) {
+        extra.push(`콘텐츠 제목: ${oembed.title}`);
+      }
+      if (oembed.authorName) {
+        extra.push(`작성자: ${oembed.authorName}`);
+      }
+      if (extra.length > 0) {
+        metadata.bodyText = `${extra.join('. ')}. ${metadata.bodyText}`;
+      }
     }
 
     return metadata;
