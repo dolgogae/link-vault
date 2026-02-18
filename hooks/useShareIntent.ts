@@ -1,6 +1,5 @@
 import { useEffect } from 'react';
 import { useShareIntent } from 'expo-share-intent';
-import { Alert } from 'react-native';
 import { useAuthStore } from '@/stores/authStore';
 import { useLinkStore } from '@/stores/linkStore';
 import { analyzeAndSaveLink } from '@/services/links';
@@ -8,7 +7,7 @@ import { analyzeAndSaveLink } from '@/services/links';
 export function useShareIntentHandler() {
   const { shareIntent, resetShareIntent } = useShareIntent();
   const { user } = useAuthStore();
-  const { incrementSaveCount } = useLinkStore();
+  const { incrementSaveCount, setSaving, setSaveResult } = useLinkStore();
 
   useEffect(() => {
     if (!shareIntent?.text || !user) return;
@@ -24,19 +23,20 @@ export function useShareIntentHandler() {
   }, [shareIntent, user]);
 
   const handleSharedUrl = async (url: string) => {
+    setSaving(true);
+    setSaveResult(null);
     try {
       const result = await analyzeAndSaveLink(url);
       incrementSaveCount();
-      Alert.alert(
-        '저장 완료',
-        `[${result.categoryPath.join(' > ')}]에 저장되었습니다.`,
-      );
+      setSaveResult({ type: 'success', categoryPath: result.categoryPath });
     } catch (error: any) {
       if (error.code === 'already-exists') {
-        Alert.alert('안내', '이미 저장된 링크입니다.');
+        setSaveResult({ type: 'error', message: '이미 저장된 링크입니다.' });
       } else {
-        Alert.alert('저장 실패', '링크 저장에 실패했습니다. 다시 시도해주세요.');
+        setSaveResult({ type: 'error', message: '링크 저장에 실패했습니다.' });
       }
+    } finally {
+      setSaving(false);
     }
   };
 }

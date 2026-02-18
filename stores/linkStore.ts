@@ -7,9 +7,11 @@ interface LinkStore {
   categoryBreadcrumb: { id: string; name: string }[];
 
   isSaving: boolean;
+  saveResult: { type: 'success'; categoryPath: string[] } | { type: 'error'; message: string } | null;
   saveCount: number;
 
   incrementSaveCount: () => void;
+  setSaveResult: (result: LinkStore['saveResult']) => void;
 
   setCategories: (categories: Category[]) => void;
   navigateToCategory: (categoryId: string | null, name?: string) => void;
@@ -26,9 +28,11 @@ export const useLinkStore = create<LinkStore>((set) => ({
   categoryBreadcrumb: [],
 
   isSaving: false,
+  saveResult: null,
   saveCount: 0,
 
   incrementSaveCount: () => set((state) => ({ saveCount: state.saveCount + 1 })),
+  setSaveResult: (saveResult) => set({ saveResult }),
 
   setCategories: (categories) => set({ categories }),
   navigateToCategory: (categoryId, name) =>
