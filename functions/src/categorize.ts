@@ -92,7 +92,6 @@ export const categorizeLink = onCall<{
 
         result = JSON.parse(content) as ClassificationResult;
 
-        // 카테고리 이름에서 이모지/아이콘 제거
         result.categoryPath = result.categoryPath.map((name) =>
           name.replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/gu, '').trim(),
         );
@@ -114,7 +113,6 @@ export const categorizeLink = onCall<{
       }
     }
 
-    // isNew 여부와 관계없이 항상 카테고리 경로 생성 (이미 존재하면 skip)
     await createCategoryPath(userId, result.categoryPath);
 
     const categoryIds = await resolveCategoryIds(userId, result.categoryPath);
@@ -233,7 +231,6 @@ async function createCategoryPath(
       .doc(userId)
       .collection('categories');
 
-    // 정확한 이름 매칭으로 기존 카테고리 검색
     let query = categoriesRef.where('name', '==', name).where('depth', '==', depth);
     if (parentId !== null) {
       query = query.where('parentId', '==', parentId);
@@ -247,7 +244,6 @@ async function createCategoryPath(
       continue;
     }
 
-    // 이모지가 포함된 기존 카테고리와 매칭 시도 (레거시 데이터 호환)
     let fallbackQuery = categoriesRef.where('depth', '==', depth);
     if (parentId !== null) {
       fallbackQuery = fallbackQuery.where('parentId', '==', parentId);
@@ -265,7 +261,6 @@ async function createCategoryPath(
     });
 
     if (emojiMatch) {
-      // 기존 이모지 카테고리 이름을 깨끗한 이름으로 업데이트
       await categoriesRef.doc(emojiMatch.id).update({ name, icon: '' });
       parentId = emojiMatch.id;
       continue;

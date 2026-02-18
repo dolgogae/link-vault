@@ -4,11 +4,6 @@ import { admin } from './admin';
 
 const emojiRegex = /[\p{Emoji_Presentation}\p{Extended_Pictographic}]/gu;
 
-/**
- * 기존 카테고리 데이터 정리:
- * 1. 이모지가 포함된 카테고리 이름에서 이모지 제거
- * 2. 동일 부모 아래 같은 이름의 중복 카테고리 병합
- */
 export const cleanupCategories = onCall(
   { timeoutSeconds: 120, memory: '512MiB' },
   async (request) => {
@@ -21,7 +16,6 @@ export const cleanupCategories = onCall(
     const catRef = db.collection('users').doc(userId).collection('categories');
     const linkRef = db.collection('users').doc(userId).collection('links');
 
-    // Phase 1: 모든 카테고리 이름에서 이모지 제거
     const allCats = await catRef.get();
     let batch = db.batch();
     let opCount = 0;
@@ -47,7 +41,6 @@ export const cleanupCategories = onCall(
 
     logger.info(`Phase 1: ${cleanedCount}개 카테고리 이름 정리 완료`);
 
-    // Phase 2: 중복 카테고리 병합 (depth 순서로 처리)
     const updatedCats = await catRef.orderBy('depth').get();
     const catsByDepth = new Map<number, any[]>();
 
@@ -66,12 +59,10 @@ export const cleanupCategories = onCall(
     for (const depth of depths) {
       const cats = catsByDepth.get(depth)!;
 
-      // (parentId, name) 기준으로 그룹화
       const groups = new Map<string, any[]>();
 
       for (const cat of cats) {
         let pid: string = (cat as any).parentId || '__null__';
-        // 이전 병합에서 리매핑된 parentId 적용
         while (idRemap.has(pid)) {
           pid = idRemap.get(pid)!;
         }
@@ -84,7 +75,6 @@ export const cleanupCategories = onCall(
       for (const [, group] of groups) {
         if (group.length <= 1) continue;
 
-        // linkCount가 가장 많은 카테고리를 유지
         group.sort((a: any, b: any) => (b.linkCount || 0) - (a.linkCount || 0));
         const target = group[0];
 
@@ -93,7 +83,6 @@ export const cleanupCategories = onCall(
 
           batch = db.batch();
 
-          // 하위 카테고리를 target 아래로 이동
           const children = await catRef
             .where('parentId', '==', source.id)
             .get();
@@ -101,7 +90,6 @@ export const cleanupCategories = onCall(
             batch.update(child.ref, { parentId: target.id });
           }
 
-          // 링크의 categoryPath에서 sourceId → targetId로 교체
           const links = await linkRef
             .where('categoryPath', 'array-contains', source.id)
             .get();
@@ -113,7 +101,6 @@ export const cleanupCategories = onCall(
             batch.update(link.ref, { categoryPath: newPath });
           }
 
-          // linkCount 합산
           const sourceLinkCount = (source as any).linkCount || 0;
           if (sourceLinkCount > 0) {
             batch.update(target.ref, {
@@ -121,7 +108,6 @@ export const cleanupCategories = onCall(
             });
           }
 
-          // 소스 삭제
           batch.delete(source.ref);
 
           await batch.commit();

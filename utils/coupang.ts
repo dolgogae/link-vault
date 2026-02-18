@@ -16,7 +16,6 @@ export function isCoupangUrl(url: string): boolean {
 export function toCoupangAffiliateUrl(originalUrl: string): string {
   if (!COUPANG_PARTNER_ID) return originalUrl;
 
-  // 이미 파트너스 링크인 경우 그대로 반환
   if (originalUrl.includes('link.coupang.com')) return originalUrl;
 
   const encodedUrl = encodeURIComponent(originalUrl);

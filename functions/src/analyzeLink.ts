@@ -11,8 +11,6 @@ export interface LinkMetadata {
   bodyText: string;
 }
 
-// --- Instagram 전용 메타데이터 강화 ---
-
 interface InstagramHints {
   username: string | null;
   postType: 'post' | 'reel' | 'story' | 'profile' | 'unknown';
@@ -20,9 +18,7 @@ interface InstagramHints {
   captionPreview: string | null;
 }
 
-/**
- * Instagram URL 구조 + og: 태그에서 유저네임, 게시물 유형, 해시태그, 캡션 추출
- */
+
 function extractInstagramHints(url: string, metadata: LinkMetadata): InstagramHints {
   const parsed = new URL(url);
   const pathParts = parsed.pathname.split('/').filter(Boolean);
@@ -30,11 +26,6 @@ function extractInstagramHints(url: string, metadata: LinkMetadata): InstagramHi
   let username: string | null = null;
   let postType: InstagramHints['postType'] = 'unknown';
 
-  // URL 패턴 분석
-  // /p/shortcode/ → post
-  // /reel/shortcode/ → reel
-  // /stories/username/id/ → story
-  // /username/ → profile (단, 시스템 경로 제외)
   const systemPaths = ['explore', 'accounts', 'directory', 'about', 'legal', 'developer'];
 
   if (pathParts[0] === 'p') {
@@ -55,25 +46,21 @@ function extractInstagramHints(url: string, metadata: LinkMetadata): InstagramHi
     username = pathParts[0];
   }
 
-  // og:title에서 유저네임 추출: "username on Instagram: '캡션...'"
   if (!username && metadata.title) {
     const titleMatch = metadata.title.match(/^@?(\w[\w.]+)\s+on\s+Instagram/i)
       || metadata.title.match(/^@?(\w[\w.]+).*Instagram/i);
     if (titleMatch) username = titleMatch[1];
   }
 
-  // og:description에서도 유저네임 추출 시도
   if (!username && metadata.description) {
     const descMatch = metadata.description.match(/^[\d,.]+ (?:likes|Likes|좋아요).+?[-–—]\s*@?(\w[\w.]+)/);
     if (descMatch) username = descMatch[1];
   }
 
-  // 해시태그 추출 (title + description + bodyText에서)
   const allText = `${metadata.title} ${metadata.description} ${metadata.bodyText}`;
   const hashtagMatches = allText.match(/#[\w가-힣\u3040-\u309F\u30A0-\u30FF]+/g) || [];
   const hashtags = [...new Set(hashtagMatches)].slice(0, 15);
 
-  // 캡션 프리뷰 추출: og:title "username on Instagram: '캡션 내용'"
   let captionPreview: string | null = null;
   const captionMatch = metadata.title?.match(/on Instagram[:\s]*[""'"](.+?)[""'"]\s*$/i)
     || metadata.title?.match(/on Instagram[:\s]+(.+)$/i);
@@ -81,9 +68,7 @@ function extractInstagramHints(url: string, metadata: LinkMetadata): InstagramHi
     captionPreview = captionMatch[1].trim();
   }
 
-  // og:description에도 캡션이 있을 수 있음
   if (!captionPreview && metadata.description) {
-    // "123 likes, 5 comments - username on Instagram: '캡션'"
     const descCaptionMatch = metadata.description.match(/on Instagram[:\s]*[""'"](.+?)[""'"]/i)
       || metadata.description.match(/[-–—]\s*[""'"](.+?)[""'"]/);
     if (descCaptionMatch) {
@@ -95,12 +80,7 @@ function extractInstagramHints(url: string, metadata: LinkMetadata): InstagramHi
 }
 
 
-/**
- * Instagram embed 페이지에서 캡션 텍스트 스크래핑 시도
- * /p/{shortcode}/embed/captioned/ 는 일반 페이지보다 접근 가능한 콘텐츠가 많음
- */
 async function fetchInstagramEmbedCaption(url: string): Promise<string | null> {
-  // /p/xxx/ 또는 /reel/xxx/ 패턴에서만 시도
   const match = url.match(/instagram\.com\/(p|reel|reels)\/[\w-]+/);
   if (!match) return null;
 
@@ -122,7 +102,6 @@ async function fetchInstagramEmbedCaption(url: string): Promise<string | null> {
     const html = await res.text();
     const $ = cheerio.load(html);
 
-    // embed 페이지의 캡션 영역에서 텍스트 추출
     const captionText =
       $('[class*="Caption"]').text() ||
       $('[class*="caption"]').text() ||
@@ -136,7 +115,6 @@ async function fetchInstagramEmbedCaption(url: string): Promise<string | null> {
   }
 }
 
-// oEmbed로 플랫폼 콘텐츠의 실제 제목/설명 보강
 const OEMBED_PLATFORMS: Record<string, (url: string) => string> = {
   'youtube.com': (url) =>
     `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`,
@@ -270,7 +248,6 @@ export const analyzeLink = onCall<{ url: string }>(
 
       if (error instanceof HttpsError) throw error;
 
-      // 스크래핑 실패 시 URL 기반 최소 메타데이터로 폴백
       metadata = {
         title: parsedUrl.hostname + decodeURIComponent(parsedUrl.pathname),
         description: '',
@@ -283,11 +260,9 @@ export const analyzeLink = onCall<{ url: string }>(
       clearTimeout(timeout);
     }
 
-    // 소셜/동영상 플랫폼은 oEmbed로 메타데이터 보강
     const oembed = await fetchOEmbed(url, parsedUrl.hostname);
     if (oembed) {
 
-      // 제목이 제네릭하면 oEmbed 제목으로 교체
       const genericTitles = ['instagram', 'youtube', 'tiktok', 'x.com', 'twitter'];
       const isGenericTitle =
         !metadata.title ||
@@ -297,7 +272,6 @@ export const analyzeLink = onCall<{ url: string }>(
         metadata.title = oembed.title;
       }
 
-      // 작성자 정보를 본문에 추가
       const extra: string[] = [];
       if (oembed.title && oembed.title !== metadata.title) {
         extra.push(`콘텐츠 제목: ${oembed.title}`);
@@ -310,14 +284,11 @@ export const analyzeLink = onCall<{ url: string }>(
       }
     }
 
-    // Instagram 전용: URL 구조 + embed 페이지에서 추가 메타데이터 확보
     if (parsedUrl.hostname.includes('instagram.com')) {
       const hints = extractInstagramHints(url, metadata);
 
-      // embed 페이지에서 캡션 텍스트 스크래핑 시도
       const embedCaption = await fetchInstagramEmbedCaption(url);
 
-      // bodyText에 Instagram 힌트 추가
       const hintParts: string[] = [];
       if (hints.username) hintParts.push(`Instagram 계정: @${hints.username}`);
       if (hints.postType !== 'unknown') {
@@ -334,7 +305,6 @@ export const analyzeLink = onCall<{ url: string }>(
         metadata.bodyText = `${hintParts.join('. ')}. ${metadata.bodyText}`;
       }
 
-      // 제목이 제네릭하면 힌트 기반으로 보강
       const isGenericIgTitle =
         !metadata.title ||
         metadata.title.toLowerCase() === 'instagram' ||
