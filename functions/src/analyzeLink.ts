@@ -11,6 +11,130 @@ export interface LinkMetadata {
   bodyText: string;
 }
 
+// --- Instagram 전용 메타데이터 강화 ---
+
+interface InstagramHints {
+  username: string | null;
+  postType: 'post' | 'reel' | 'story' | 'profile' | 'unknown';
+  hashtags: string[];
+  captionPreview: string | null;
+}
+
+/**
+ * Instagram URL 구조 + og: 태그에서 유저네임, 게시물 유형, 해시태그, 캡션 추출
+ */
+function extractInstagramHints(url: string, metadata: LinkMetadata): InstagramHints {
+  const parsed = new URL(url);
+  const pathParts = parsed.pathname.split('/').filter(Boolean);
+
+  let username: string | null = null;
+  let postType: InstagramHints['postType'] = 'unknown';
+
+  // URL 패턴 분석
+  // /p/shortcode/ → post
+  // /reel/shortcode/ → reel
+  // /stories/username/id/ → story
+  // /username/ → profile (단, 시스템 경로 제외)
+  const systemPaths = ['explore', 'accounts', 'directory', 'about', 'legal', 'developer'];
+
+  if (pathParts[0] === 'p') {
+    postType = 'post';
+  } else if (pathParts[0] === 'reel' || pathParts[0] === 'reels') {
+    postType = 'reel';
+  } else if (pathParts[0] === 'stories') {
+    postType = 'story';
+    username = pathParts[1] || null;
+  } else if (pathParts.length >= 2 && pathParts[1] === 'p') {
+    postType = 'post';
+    username = pathParts[0];
+  } else if (pathParts.length >= 2 && (pathParts[1] === 'reel' || pathParts[1] === 'reels')) {
+    postType = 'reel';
+    username = pathParts[0];
+  } else if (pathParts.length === 1 && !systemPaths.includes(pathParts[0])) {
+    postType = 'profile';
+    username = pathParts[0];
+  }
+
+  // og:title에서 유저네임 추출: "username on Instagram: '캡션...'"
+  if (!username && metadata.title) {
+    const titleMatch = metadata.title.match(/^@?(\w[\w.]+)\s+on\s+Instagram/i)
+      || metadata.title.match(/^@?(\w[\w.]+).*Instagram/i);
+    if (titleMatch) username = titleMatch[1];
+  }
+
+  // og:description에서도 유저네임 추출 시도
+  if (!username && metadata.description) {
+    const descMatch = metadata.description.match(/^[\d,.]+ (?:likes|Likes|좋아요).+?[-–—]\s*@?(\w[\w.]+)/);
+    if (descMatch) username = descMatch[1];
+  }
+
+  // 해시태그 추출 (title + description + bodyText에서)
+  const allText = `${metadata.title} ${metadata.description} ${metadata.bodyText}`;
+  const hashtagMatches = allText.match(/#[\w가-힣\u3040-\u309F\u30A0-\u30FF]+/g) || [];
+  const hashtags = [...new Set(hashtagMatches)].slice(0, 15);
+
+  // 캡션 프리뷰 추출: og:title "username on Instagram: '캡션 내용'"
+  let captionPreview: string | null = null;
+  const captionMatch = metadata.title?.match(/on Instagram[:\s]*[""'"](.+?)[""'"]\s*$/i)
+    || metadata.title?.match(/on Instagram[:\s]+(.+)$/i);
+  if (captionMatch) {
+    captionPreview = captionMatch[1].trim();
+  }
+
+  // og:description에도 캡션이 있을 수 있음
+  if (!captionPreview && metadata.description) {
+    // "123 likes, 5 comments - username on Instagram: '캡션'"
+    const descCaptionMatch = metadata.description.match(/on Instagram[:\s]*[""'"](.+?)[""'"]/i)
+      || metadata.description.match(/[-–—]\s*[""'"](.+?)[""'"]/);
+    if (descCaptionMatch) {
+      captionPreview = descCaptionMatch[1].trim();
+    }
+  }
+
+  return { username, postType, hashtags, captionPreview };
+}
+
+/**
+ * Instagram embed 페이지에서 캡션 텍스트 스크래핑 시도
+ * /p/{shortcode}/embed/captioned/ 는 일반 페이지보다 접근 가능한 콘텐츠가 많음
+ */
+async function fetchInstagramEmbedCaption(url: string): Promise<string | null> {
+  // /p/xxx/ 또는 /reel/xxx/ 패턴에서만 시도
+  const match = url.match(/instagram\.com\/(p|reel|reels)\/[\w-]+/);
+  if (!match) return null;
+
+  const embedUrl = url.replace(/\/?(\?.*)?$/, '/embed/captioned/');
+
+  try {
+    const res = await fetch(embedUrl, {
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+        Accept: 'text/html',
+      },
+      signal: AbortSignal.timeout(5000),
+      redirect: 'follow',
+    });
+
+    if (!res.ok) return null;
+
+    const html = await res.text();
+    const $ = cheerio.load(html);
+
+    // embed 페이지의 캡션 영역에서 텍스트 추출
+    const captionText =
+      $('[class*="Caption"]').text() ||
+      $('[class*="caption"]').text() ||
+      $('meta[property="og:description"]').attr('content') ||
+      '';
+
+    const cleaned = captionText.replace(/\s+/g, ' ').trim();
+    return cleaned.length > 10 ? cleaned : null;
+  } catch {
+    return null;
+  }
+}
+
 // oEmbed로 플랫폼 콘텐츠의 실제 제목/설명 보강
 const OEMBED_PLATFORMS: Record<string, (url: string) => string> = {
   'youtube.com': (url) =>
@@ -175,6 +299,54 @@ export const analyzeLink = onCall<{ url: string }>(
       }
       if (extra.length > 0) {
         metadata.bodyText = `${extra.join('. ')}. ${metadata.bodyText}`;
+      }
+    }
+
+    // Instagram 전용: URL 구조 + embed 페이지에서 추가 메타데이터 확보
+    if (parsedUrl.hostname.includes('instagram.com')) {
+      const hints = extractInstagramHints(url, metadata);
+
+      logger.info('Instagram hints extracted', { hints });
+
+      // embed 페이지에서 캡션 텍스트 스크래핑 시도
+      const embedCaption = await fetchInstagramEmbedCaption(url);
+
+      // bodyText에 Instagram 힌트 추가
+      const hintParts: string[] = [];
+      if (hints.username) hintParts.push(`Instagram 계정: @${hints.username}`);
+      if (hints.postType !== 'unknown') {
+        const typeLabel: Record<string, string> = {
+          post: '게시물', reel: '릴스(짧은 영상)', story: '스토리', profile: '프로필',
+        };
+        hintParts.push(`콘텐츠 유형: ${typeLabel[hints.postType]}`);
+      }
+      if (hints.captionPreview) hintParts.push(`캡션: ${hints.captionPreview}`);
+      if (embedCaption) hintParts.push(`캡션 전문: ${embedCaption.slice(0, 500)}`);
+      if (hints.hashtags.length > 0) hintParts.push(`해시태그: ${hints.hashtags.join(' ')}`);
+
+      if (hintParts.length > 0) {
+        metadata.bodyText = `${hintParts.join('. ')}. ${metadata.bodyText}`;
+      }
+
+      // 제목이 제네릭하면 힌트 기반으로 보강
+      const isGenericIgTitle =
+        !metadata.title ||
+        metadata.title.toLowerCase() === 'instagram' ||
+        /^instagram\s*(photo|post|reel)?/i.test(metadata.title);
+
+      if (isGenericIgTitle) {
+        const titleParts: string[] = [];
+        if (hints.username) titleParts.push(`@${hints.username}`);
+        if (hints.captionPreview) {
+          titleParts.push(hints.captionPreview.slice(0, 60));
+        } else if (embedCaption) {
+          titleParts.push(embedCaption.slice(0, 60));
+        } else if (hints.hashtags.length > 0) {
+          titleParts.push(hints.hashtags.slice(0, 3).join(' '));
+        }
+        if (titleParts.length > 0) {
+          metadata.title = titleParts.join(' - ');
+        }
       }
     }
 
