@@ -94,6 +94,7 @@ function extractInstagramHints(url: string, metadata: LinkMetadata): InstagramHi
   return { username, postType, hashtags, captionPreview };
 }
 
+
 /**
  * Instagram embed 페이지에서 캡션 텍스트 스크래핑 시도
  * /p/{shortcode}/embed/captioned/ 는 일반 페이지보다 접근 가능한 콘텐츠가 많음
@@ -198,13 +199,20 @@ export const analyzeLink = onCall<{ url: string }>(
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10000);
 
+    // Instagram/TikTok은 크롤러 봇 UA를 사용해야 og: 태그를 정상 반환
+    const isWalledPlatform = ['instagram.com', 'tiktok.com'].some((d) =>
+      parsedUrl.hostname.includes(d),
+    );
+    const userAgent = isWalledPlatform
+      ? 'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)'
+      : 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
+
     let metadata: LinkMetadata;
     try {
       const response = await fetch(url, {
         signal: controller.signal,
         headers: {
-          'User-Agent':
-            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+          'User-Agent': userAgent,
           Accept:
             'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
           'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
@@ -253,6 +261,7 @@ export const analyzeLink = onCall<{ url: string }>(
         domain: parsedUrl.hostname,
         bodyText,
       };
+
     } catch (error: any) {
       logger.warn('Scraping failed, using fallback metadata', {
         url,
@@ -277,7 +286,6 @@ export const analyzeLink = onCall<{ url: string }>(
     // 소셜/동영상 플랫폼은 oEmbed로 메타데이터 보강
     const oembed = await fetchOEmbed(url, parsedUrl.hostname);
     if (oembed) {
-      logger.info('oEmbed data fetched', { domain: parsedUrl.hostname, oembed });
 
       // 제목이 제네릭하면 oEmbed 제목으로 교체
       const genericTitles = ['instagram', 'youtube', 'tiktok', 'x.com', 'twitter'];
@@ -305,8 +313,6 @@ export const analyzeLink = onCall<{ url: string }>(
     // Instagram 전용: URL 구조 + embed 페이지에서 추가 메타데이터 확보
     if (parsedUrl.hostname.includes('instagram.com')) {
       const hints = extractInstagramHints(url, metadata);
-
-      logger.info('Instagram hints extracted', { hints });
 
       // embed 페이지에서 캡션 텍스트 스크래핑 시도
       const embedCaption = await fetchInstagramEmbedCaption(url);
