@@ -82,7 +82,7 @@ export default function OnboardingScreen() {
             className="flex-1 items-center justify-center px-10"
           >
             <View className="w-24 h-24 rounded-full bg-primary/10 items-center justify-center mb-10">
-              <FontAwesome name={item.icon} size={40} color="#2563EB" />
+              <FontAwesome name={item.icon} size={40} color="#8000C8" />
             </View>
             <Text className="text-2xl font-bold text-text dark:text-text-dark text-center leading-9">
               {item.title}

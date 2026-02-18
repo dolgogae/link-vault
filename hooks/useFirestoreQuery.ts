@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
-import { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
+import { onSnapshot, FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
 import { convertTimestamp } from '@/utils/firestore';
 
+type DocData = Record<string, any>;
+
 export function useFirestoreQuery<T>(
-  queryFn: (() => FirebaseFirestoreTypes.Query) | null,
+  queryFn: (() => FirebaseFirestoreTypes.Query<any>) | null,
   deps: any[] = [],
 ) {
   const [data, setData] = useState<T[]>([]);
@@ -18,22 +20,27 @@ export function useFirestoreQuery<T>(
     }
 
     setLoading(true);
-    const query = queryFn();
+    const q = queryFn();
 
-    const unsubscribe = query.onSnapshot(
+    const unsubscribe = onSnapshot(
+      q,
       (snapshot) => {
-        const items = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-          createdAt: convertTimestamp(doc.data().createdAt),
-          savedAt: convertTimestamp(doc.data().savedAt),
-          lastAccessedAt: convertTimestamp(doc.data().lastAccessedAt),
-        })) as T[];
+        const items = snapshot.docs.map((d: { id: string; data: () => DocData }) => {
+          const data = d.data();
+          return {
+            id: d.id,
+            ...data,
+            createdAt: convertTimestamp(data.createdAt),
+            savedAt: convertTimestamp(data.savedAt),
+            lastAccessedAt: convertTimestamp(data.lastAccessedAt),
+          };
+        }) as T[];
         setData(items);
         setLoading(false);
         setError(null);
       },
       (err) => {
+        console.error('[useFirestoreQuery] onSnapshot error:', err);
         setError(err as Error);
         setLoading(false);
       },

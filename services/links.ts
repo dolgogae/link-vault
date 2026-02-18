@@ -1,21 +1,36 @@
-import firestore from '@react-native-firebase/firestore';
-import functions from '@react-native-firebase/functions';
+import {
+  getFirestore,
+  doc,
+  query,
+  where,
+  orderBy,
+  limit,
+  getDocs,
+  updateDoc,
+  writeBatch,
+  increment,
+} from '@react-native-firebase/firestore';
+import { getFunctions, httpsCallable } from '@react-native-firebase/functions';
 import { Link } from '@/types';
 import { getUserRef, getLinksRef, getCategoriesRef } from '@/utils/firestore';
+import { pruneEmptyAncestors } from '@/services/categories';
 
 export async function analyzeAndSaveLink(url: string): Promise<{
   linkId: string;
   categoryPath: string[];
+  categoryIds: string[];
 }> {
-  const analyzeResult = await functions().httpsCallable('analyzeLink')({ url });
+  const fns = getFunctions();
+
+  const analyzeResult = await httpsCallable(fns, 'analyzeLink')({ url });
   const metadata = analyzeResult.data as any;
 
-  const categorizeResult = await functions().httpsCallable('categorizeLink')({
+  const categorizeResult = await httpsCallable(fns, 'categorizeLink')({
     metadata,
   });
   const classification = categorizeResult.data as any;
 
-  const saveResult = await functions().httpsCallable('saveLink')({
+  const saveResult = await httpsCallable(fns, 'saveLink')({
     url,
     title: metadata.title,
     description: metadata.description,
@@ -28,7 +43,8 @@ export async function analyzeAndSaveLink(url: string): Promise<{
     icon: classification.icon,
   });
 
-  return saveResult.data as { linkId: string; categoryPath: string[] };
+  const saveData = saveResult.data as { linkId: string; categoryPath: string[] };
+  return { ...saveData, categoryIds: classification.categoryIds };
 }
 
 export function getLinksQuery(
@@ -36,45 +52,55 @@ export function getLinksQuery(
   categoryId?: string,
   pageSize = 20,
 ) {
-  let query = getLinksRef(userId)
-    .orderBy('savedAt', 'desc')
-    .limit(pageSize);
-
   if (categoryId) {
-    query = query.where('categoryPath', 'array-contains', categoryId);
+    return query(
+      getLinksRef(userId),
+      where('categoryPath', 'array-contains', categoryId),
+      orderBy('savedAt', 'desc'),
+      limit(pageSize),
+    );
   }
 
-  return query;
+  return query(
+    getLinksRef(userId),
+    orderBy('savedAt', 'desc'),
+    limit(pageSize),
+  );
 }
 
 export function getFavoriteLinksQuery(userId: string, pageSize = 20) {
-  return getLinksRef(userId)
-    .where('isFavorite', '==', true)
-    .orderBy('savedAt', 'desc')
-    .limit(pageSize);
+  return query(
+    getLinksRef(userId),
+    where('isFavorite', '==', true),
+    orderBy('savedAt', 'desc'),
+    limit(pageSize),
+  );
 }
 
 export async function toggleFavorite(userId: string, linkId: string, isFavorite: boolean) {
-  await getLinksRef(userId).doc(linkId).update({ isFavorite: !isFavorite });
+  await updateDoc(doc(getLinksRef(userId), linkId), { isFavorite: !isFavorite });
 }
 
 export async function deleteLink(userId: string, linkId: string, categoryPath: string[]) {
-  const batch = firestore().batch();
+  const db = getFirestore();
+  const batch = writeBatch(db);
 
-  batch.delete(getLinksRef(userId).doc(linkId));
+  batch.delete(doc(getLinksRef(userId), linkId));
 
-  if (categoryPath.length > 0) {
-    const lastCatId = categoryPath[categoryPath.length - 1];
-    batch.update(getCategoriesRef(userId).doc(lastCatId), {
-      linkCount: firestore.FieldValue.increment(-1),
+  for (const catId of categoryPath) {
+    batch.update(doc(getCategoriesRef(userId), catId), {
+      linkCount: increment(-1),
     });
   }
 
   batch.update(getUserRef(userId), {
-    linkCount: firestore.FieldValue.increment(-1),
+    linkCount: increment(-1),
   });
 
   await batch.commit();
+
+  // 빈 폴더 자동 정리 (리프 → 루트 방향)
+  await pruneEmptyAncestors(userId, categoryPath);
 }
 
 export async function moveLink(
@@ -83,41 +109,42 @@ export async function moveLink(
   oldCategoryPath: string[],
   newCategoryPath: string[],
 ) {
-  const batch = firestore().batch();
+  const db = getFirestore();
+  const batch = writeBatch(db);
 
-  batch.update(getLinksRef(userId).doc(linkId), { categoryPath: newCategoryPath });
+  batch.update(doc(getLinksRef(userId), linkId), { categoryPath: newCategoryPath });
 
-  if (oldCategoryPath.length > 0) {
+  for (const catId of oldCategoryPath) {
     batch.update(
-      getCategoriesRef(userId).doc(oldCategoryPath[oldCategoryPath.length - 1]),
-      { linkCount: firestore.FieldValue.increment(-1) },
+      doc(getCategoriesRef(userId), catId),
+      { linkCount: increment(-1) },
     );
   }
 
-  if (newCategoryPath.length > 0) {
+  for (const catId of newCategoryPath) {
     batch.update(
-      getCategoriesRef(userId).doc(newCategoryPath[newCategoryPath.length - 1]),
-      { linkCount: firestore.FieldValue.increment(1) },
+      doc(getCategoriesRef(userId), catId),
+      { linkCount: increment(1) },
     );
   }
 
   await batch.commit();
 }
 
-export async function searchLinks(userId: string, query: string): Promise<Link[]> {
-  const lowerQuery = query.toLowerCase();
+export async function searchLinks(userId: string, queryStr: string): Promise<Link[]> {
+  const lowerQuery = queryStr.toLowerCase();
 
-  const snapshot = await getLinksRef(userId)
-    .orderBy('savedAt', 'desc')
-    .get();
+  const snapshot = await getDocs(
+    query(getLinksRef(userId), orderBy('savedAt', 'desc')),
+  );
 
   return snapshot.docs
-    .map((doc) => ({ id: doc.id, ...doc.data() } as Link))
+    .map((d: { id: string; data: () => Record<string, any> }) => ({ id: d.id, ...d.data() } as Link))
     .filter(
-      (link) =>
+      (link: Link) =>
         link.title.toLowerCase().includes(lowerQuery) ||
         link.url.toLowerCase().includes(lowerQuery) ||
         link.description.toLowerCase().includes(lowerQuery) ||
-        link.tags.some((tag) => tag.toLowerCase().includes(lowerQuery)),
+        link.tags.some((tag: string) => tag.toLowerCase().includes(lowerQuery)),
     );
 }

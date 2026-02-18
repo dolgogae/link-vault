@@ -13,6 +13,7 @@ interface LinkStore {
 
   setCategories: (categories: Category[]) => void;
   navigateToCategory: (categoryId: string | null, name?: string) => void;
+  navigateToPath: (categoryIds: string[], categoryNames: string[]) => void;
   goBackCategory: () => void;
   resetNavigation: () => void;
 
@@ -37,6 +38,11 @@ export const useLinkStore = create<LinkStore>((set) => ({
         ? [...state.categoryBreadcrumb, { id: categoryId, name }]
         : state.categoryBreadcrumb,
     })),
+  navigateToPath: (categoryIds, categoryNames) =>
+    set({
+      currentCategoryId: categoryIds[categoryIds.length - 1] || null,
+      categoryBreadcrumb: categoryIds.map((id, i) => ({ id, name: categoryNames[i] })),
+    }),
   goBackCategory: () =>
     set((state) => {
       const newBreadcrumb = state.categoryBreadcrumb.slice(0, -1);

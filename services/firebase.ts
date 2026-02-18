@@ -1,7 +1,5 @@
-import firebase from '@react-native-firebase/app';
-import auth from '@react-native-firebase/auth';
-import firestore from '@react-native-firebase/firestore';
-import storage from '@react-native-firebase/storage';
-import analytics from '@react-native-firebase/analytics';
+// Modular API — 개별 서비스에서 직접 import하여 사용
+// 예: import { getFirestore } from '@react-native-firebase/firestore'
+// 예: import { getAuth } from '@react-native-firebase/auth'
 
-export { firebase, auth, firestore, storage, analytics };
+export {};

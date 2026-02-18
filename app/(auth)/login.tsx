@@ -2,10 +2,10 @@ import { useState } from 'react';
 import { View, Text, Pressable, Alert, ActivityIndicator, Platform } from 'react-native';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import * as AppleAuthentication from 'expo-apple-authentication';
-import { signInWithGoogle, signInWithApple, signInWithKakao } from '@/services/auth';
+import { signInWithGoogle, signInWithApple } from '@/services/auth';
 
 export default function LoginScreen() {
-  const [loading, setLoading] = useState<'google' | 'apple' | 'kakao' | null>(null);
+  const [loading, setLoading] = useState<'google' | 'apple' | null>(null);
 
   const handleGoogleLogin = async () => {
     setLoading('google');
@@ -35,20 +35,6 @@ export default function LoginScreen() {
     }
   };
 
-  const handleKakaoLogin = async () => {
-    setLoading('kakao');
-    try {
-      await signInWithKakao();
-    } catch (error: any) {
-      // 사용자가 취소한 경우는 무시
-      if (error.code !== 'E_CANCELLED_OPERATION') {
-        Alert.alert('로그인 실패', error.message || '다시 시도해주세요.');
-      }
-    } finally {
-      setLoading(null);
-    }
-  };
-
   return (
     <View className="flex-1 bg-background dark:bg-background-dark justify-center px-6">
       <View className="items-center mb-16">
@@ -64,24 +50,6 @@ export default function LoginScreen() {
       </View>
 
       <View className="gap-3">
-        <Pressable
-          onPress={handleKakaoLogin}
-          disabled={loading !== null}
-          className="flex-row items-center justify-center py-4 rounded-xl active:opacity-80"
-          style={{ backgroundColor: '#FEE500' }}
-        >
-          {loading === 'kakao' ? (
-            <ActivityIndicator size="small" color="#000000" />
-          ) : (
-            <>
-              <Text style={{ fontSize: 20, marginRight: 10 }}>💬</Text>
-              <Text className="text-base font-semibold" style={{ color: '#000000D9' }}>
-                카카오로 시작하기
-              </Text>
-            </>
-          )}
-        </Pressable>
-
         <Pressable
           onPress={handleGoogleLogin}
           disabled={loading !== null}

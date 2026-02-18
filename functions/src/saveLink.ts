@@ -1,4 +1,5 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
+import * as logger from 'firebase-functions/logger';
 import { admin } from './admin';
 
 interface SaveLinkData {
@@ -54,24 +55,28 @@ export const saveLink = onCall<SaveLinkData>(
       isFavorite: false,
     });
 
-    if (data.categoryIds.length > 0) {
-      const lastCatId = data.categoryIds[data.categoryIds.length - 1];
+    for (const catId of data.categoryIds) {
       const catRef = db
         .collection('users')
         .doc(userId)
         .collection('categories')
-        .doc(lastCatId);
-      batch.update(catRef, {
+        .doc(catId);
+      batch.set(catRef, {
         linkCount: admin.firestore.FieldValue.increment(1),
-      });
+      }, { merge: true });
     }
 
     const userRef = db.collection('users').doc(userId);
-    batch.update(userRef, {
+    batch.set(userRef, {
       linkCount: admin.firestore.FieldValue.increment(1),
-    });
+    }, { merge: true });
 
-    await batch.commit();
+    try {
+      await batch.commit();
+    } catch (error: any) {
+      logger.error('saveLink batch.commit error', { error: error.message, stack: error.stack });
+      throw error;
+    }
 
     return {
       linkId: linkRef.id,

@@ -15,6 +15,7 @@ interface CategoryActionSheetProps {
   userId: string;
   onClose: () => void;
   onUpdated: () => void;
+  onRenamed?: (categoryId: string, newName: string) => void;
 }
 
 export function CategoryActionSheet({
@@ -23,6 +24,7 @@ export function CategoryActionSheet({
   userId,
   onClose,
   onUpdated,
+  onRenamed,
 }: CategoryActionSheetProps) {
   const [mode, setMode] = useState<'actions' | 'rename' | 'icon'>('actions');
   const [newName, setNewName] = useState('');
@@ -30,9 +32,11 @@ export function CategoryActionSheet({
 
   const handleRename = async () => {
     if (!category || !newName.trim()) return;
-    await renameCategory(userId, category.id, newName.trim());
+    const trimmed = newName.trim();
+    await renameCategory(userId, category.id, trimmed);
     setMode('actions');
     setNewName('');
+    onRenamed?.(category.id, trimmed);
     onUpdated();
     onClose();
   };

@@ -4,14 +4,14 @@
     "slug": "link-vault",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/link-vault-icon.png",
     "scheme": "linkvault",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/images/splash-icon.png",
+      "image": "./assets/images/link-vault-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#8000C8"
     },
     "ios": {
       "supportsTablet": true,
@@ -22,8 +22,8 @@
       "package": "com.linkvault.app",
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "foregroundImage": "./assets/images/link-vault-icon.png",
+        "backgroundColor": "#8000C8"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
@@ -40,17 +40,10 @@
       "@react-native-google-signin/google-signin",
       "expo-share-intent",
       [
-        "@react-native-seoul/kakao-login",
-        {
-          "kakaoAppKey": "YOUR_KAKAO_NATIVE_APP_KEY",
-          "kotlinVersion": "1.9.25"
-        }
-      ],
-      [
         "react-native-google-mobile-ads",
         {
-          "androidAppId": "ca-app-pub-xxxxxxxxxxxxxxxx~yyyyyyyyyy",
-          "iosAppId": "ca-app-pub-xxxxxxxxxxxxxxxx~yyyyyyyyyy"
+          "androidAppId": "ca-app-pub-5234234878363803~8534862763",
+          "iosAppId": "ca-app-pub-5234234878363803~8151719388"
         }
       ]
     ],

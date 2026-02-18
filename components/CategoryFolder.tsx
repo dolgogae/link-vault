@@ -1,58 +1,62 @@
-import { View, Text, Pressable } from 'react-native';
+import { View, Text, Pressable, Image } from 'react-native';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { Category } from '@/types';
+
+const folderIcon = require('@/assets/images/folder-purple.png');
 
 interface CategoryFolderProps {
   category: Category;
   onPress: (category: Category) => void;
   onLongPress?: (category: Category) => void;
-  viewMode?: 'grid' | 'list';
 }
 
 export function CategoryFolder({
   category,
   onPress,
   onLongPress,
-  viewMode = 'grid',
 }: CategoryFolderProps) {
-  if (viewMode === 'list') {
-    return (
-      <Pressable
-        onPress={() => onPress(category)}
-        onLongPress={() => onLongPress?.(category)}
-        className="flex-row items-center px-4 py-3 border-b border-surface dark:border-surface-dark active:bg-surface dark:active:bg-surface-dark"
-      >
-        <Text className="text-2xl mr-3">{category.icon || '📁'}</Text>
-        <View className="flex-1">
-          <Text className="text-base font-medium text-text dark:text-text-dark">
-            {category.name}
-          </Text>
-          <Text className="text-xs text-text-secondary dark:text-text-dark-secondary mt-0.5">
-            {category.linkCount}개 링크
-          </Text>
-        </View>
-        <FontAwesome name="chevron-right" size={12} color="#9CA3AF" />
-      </Pressable>
-    );
-  }
-
   return (
     <Pressable
       onPress={() => onPress(category)}
       onLongPress={() => onLongPress?.(category)}
-      className="items-center justify-center p-4 bg-surface dark:bg-surface-dark rounded-xl active:opacity-80"
-      style={{ width: '48%', aspectRatio: 1 }}
+      className="w-1/3 items-center mb-5 active:scale-95"
+      style={{ transition: 'transform 0.1s' } as any}
     >
-      <Text className="text-4xl mb-2">{category.icon || '📁'}</Text>
+      <View className="w-[80px] h-[80px]">
+        <Image
+          source={folderIcon}
+          className="w-[80px] h-[80px]"
+          resizeMode="contain"
+        />
+        {/* Badge icon */}
+        <View
+          className="absolute bottom-0.5 right-0.5 w-[26px] h-[26px] rounded-full bg-white items-center justify-center"
+          style={{
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 1 },
+            shadowOpacity: 0.12,
+            shadowRadius: 2,
+            elevation: 2,
+          }}
+        >
+          <FontAwesome name="link" size={12} color="#8000C8" />
+        </View>
+      </View>
+
+      {/* Name */}
       <Text
-        className="text-sm font-medium text-text dark:text-text-dark text-center"
+        className="text-sm text-text dark:text-text-dark text-center mt-2 px-1 leading-[18px]"
         numberOfLines={2}
       >
         {category.name}
       </Text>
-      <Text className="text-xs text-text-secondary dark:text-text-dark-secondary mt-1">
-        {category.linkCount}개
-      </Text>
+
+      {/* Link count */}
+      {category.linkCount > 0 && (
+        <Text className="text-xs text-text-secondary dark:text-text-dark-secondary mt-0.5">
+          {category.linkCount}
+        </Text>
+      )}
     </Pressable>
   );
 }
