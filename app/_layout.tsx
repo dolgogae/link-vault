@@ -5,11 +5,7 @@ import { useFonts } from 'expo-font';
 import { Stack, router } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
-import { LogBox } from 'react-native';
 import 'react-native-reanimated';
-
-// nativewind(react-native-css-interop)이 deprecated RN SafeAreaView를 참조하는 라이브러리 이슈
-LogBox.ignoreLogs(['SafeAreaView has been deprecated']);
 
 import { useColorScheme } from '@/components/useColorScheme';
 import { Colors } from '@/constants/theme';
