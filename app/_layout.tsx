@@ -16,6 +16,7 @@ import { Colors } from '@/constants/theme';
 import { useAuthStore } from '@/stores/authStore';
 import { onAuthStateChanged, initializeGoogleSignIn } from '@/services/auth';
 import { useShareIntentHandler } from '@/hooks/useShareIntent';
+import { SaveProgressToast } from '@/components/SaveProgressToast';
 
 import '../global.css';
 
@@ -114,6 +115,7 @@ function RootLayoutNav() {
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="(auth)" options={{ headerShown: false }} />
         </Stack>
+        <SaveProgressToast />
       </ThemeProvider>
     </GestureHandlerRootView>
   );
