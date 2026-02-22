@@ -75,7 +75,7 @@ export const saveLink = onCall<SaveLinkData>(
       await batch.commit();
     } catch (error: any) {
       logger.error('saveLink batch.commit error', { error: error.message, stack: error.stack });
-      throw error;
+      throw new HttpsError('internal', `링크 저장 중 오류가 발생했습니다: ${error.message}`);
     }
 
     return {
