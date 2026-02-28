@@ -1,7 +1,7 @@
 export interface User {
   displayName: string;
   email: string;
-  provider: 'google' | 'apple';
+  provider: 'google' | 'apple' | 'email';
   createdAt: Date;
   linkCount: number;
   plan: 'free' | 'premium';
