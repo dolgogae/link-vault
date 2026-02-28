@@ -45,6 +45,12 @@
           "androidAppId": "ca-app-pub-5234234878363803~8534862763",
           "iosAppId": "ca-app-pub-5234234878363803~8151719388"
         }
+      ],
+      [
+        "./plugins/withGoogleMobileAdsAppJson",
+        {
+          "androidAppId": "ca-app-pub-5234234878363803~8534862763"
+        }
       ]
     ],
     "experiments": {
