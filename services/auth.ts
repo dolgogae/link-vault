@@ -3,6 +3,7 @@ import {
   signInWithCredential,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
+  updateProfile,
   signOut as firebaseSignOut,
   onAuthStateChanged as firebaseOnAuthStateChanged,
   GoogleAuthProvider,
@@ -82,7 +83,7 @@ export async function signInWithApple() {
       .join('');
 
     if (displayName && !userCredential.user.displayName) {
-      await userCredential.user.updateProfile({ displayName });
+      await updateProfile(userCredential.user, { displayName });
     }
   }
 
@@ -93,7 +94,7 @@ export async function signInWithApple() {
 
 export async function signUpWithEmail(email: string, password: string, displayName: string) {
   const userCredential = await createUserWithEmailAndPassword(getAuth(), email, password);
-  await userCredential.user.updateProfile({ displayName });
+  await updateProfile(userCredential.user, { displayName });
   await createUserDocumentIfNeeded(userCredential.user, 'email', displayName);
   return userCredential;
 }
