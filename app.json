@@ -9,9 +9,9 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/images/link-vault-icon.png",
+      "image": "./assets/images/link-vault-foreground.png",
       "resizeMode": "contain",
-      "backgroundColor": "#8000C8"
+      "backgroundColor": "#881AB7"
     },
     "ios": {
       "supportsTablet": true,
@@ -22,8 +22,9 @@
       "package": "com.linkvault.app",
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/link-vault-icon.png",
-        "backgroundColor": "#8000C8"
+        "foregroundImage": "./assets/images/link-vault-foreground.png",
+        "monochromeImage": "./assets/images/link-vault-foreground.png",
+        "backgroundColor": "#881AB7"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
@@ -44,6 +45,12 @@
         {
           "androidAppId": "ca-app-pub-5234234878363803~8534862763",
           "iosAppId": "ca-app-pub-5234234878363803~8151719388"
+        }
+      ],
+      [
+        "./plugins/withGoogleMobileAdsAppJson",
+        {
+          "androidAppId": "ca-app-pub-5234234878363803~8534862763"
         }
       ]
     ],
