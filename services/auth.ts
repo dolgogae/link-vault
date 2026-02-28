@@ -1,6 +1,8 @@
 import {
   getAuth,
   signInWithCredential,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
   signOut as firebaseSignOut,
   onAuthStateChanged as firebaseOnAuthStateChanged,
   GoogleAuthProvider,
@@ -89,9 +91,21 @@ export async function signInWithApple() {
   return userCredential;
 }
 
+export async function signUpWithEmail(email: string, password: string, displayName: string) {
+  const userCredential = await createUserWithEmailAndPassword(getAuth(), email, password);
+  await userCredential.user.updateProfile({ displayName });
+  await createUserDocumentIfNeeded(userCredential.user, 'email', displayName);
+  return userCredential;
+}
+
+export async function signInWithEmail(email: string, password: string) {
+  return await signInWithEmailAndPassword(getAuth(), email, password);
+}
+
 async function createUserDocumentIfNeeded(
   user: { uid: string; displayName: string | null; email: string | null },
   provider: User['provider'],
+  displayNameOverride?: string,
 ) {
   const db = getFirestore();
   const userRef = doc(db, 'users', user.uid);
@@ -99,7 +113,7 @@ async function createUserDocumentIfNeeded(
 
   if (!snapshot.exists) {
     const userData: User = {
-      displayName: user.displayName || '사용자',
+      displayName: displayNameOverride || user.displayName || '사용자',
       email: user.email || '',
       provider,
       createdAt: new Date(),
