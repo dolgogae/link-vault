@@ -1,6 +1,7 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { defineSecret } from 'firebase-functions/params';
 import OpenAI from 'openai';
+import * as crypto from 'crypto';
 import * as logger from 'firebase-functions/logger';
 import { LinkMetadata } from './analyzeLink';
 import { admin } from './admin';
@@ -20,6 +21,40 @@ interface ClassificationResult {
   tags: string[];
 }
 
+interface CachedCategory {
+  categoryPath: string[];
+  tags: string[];
+  createdAt: FirebaseFirestore.FieldValue;
+}
+
+function generateMetadataHash(metadata: LinkMetadata): string {
+  const key = [
+    metadata.domain,
+    metadata.title,
+    metadata.description,
+    metadata.bodyText.slice(0, 500),
+  ].join('|');
+  return crypto.createHash('sha256').update(key).digest('hex');
+}
+
+async function getCachedCategory(hash: string): Promise<CachedCategory | null> {
+  const doc = await admin.firestore().collection('categoryCache').doc(hash).get();
+  if (!doc.exists) return null;
+  return doc.data() as CachedCategory;
+}
+
+async function setCachedCategory(
+  hash: string,
+  categoryPath: string[],
+  tags: string[],
+): Promise<void> {
+  await admin.firestore().collection('categoryCache').doc(hash).set({
+    categoryPath,
+    tags,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+}
+
 export const categorizeLink = onCall<{
   metadata: LinkMetadata;
   userId: string;
@@ -37,6 +72,40 @@ export const categorizeLink = onCall<{
     const { metadata } = request.data;
     const userId = request.auth.uid;
 
+    // 1. 메타데이터 해싱 → 캐시 조회
+    const metadataHash = generateMetadataHash(metadata);
+    const cached = await getCachedCategory(metadataHash);
+
+    if (cached) {
+      logger.info('Cache hit', { hash: metadataHash, categoryPath: cached.categoryPath });
+
+      // 캐시된 카테고리 경로를 현재 사용자에게도 생성
+      await createCategoryPath(userId, cached.categoryPath);
+      const categoryIds = await resolveCategoryIds(userId, cached.categoryPath);
+
+      if (categoryIds.length === 0) {
+        logger.error('resolveCategoryIds returned empty (cached)', {
+          userId,
+          categoryPath: cached.categoryPath,
+        });
+        throw new HttpsError(
+          'internal',
+          `카테고리 생성 실패: ${cached.categoryPath.join(' > ')}`,
+        );
+      }
+
+      return {
+        categoryPath: cached.categoryPath,
+        categoryIds,
+        isNew: false,
+        tags: cached.tags,
+        icon: '',
+      };
+    }
+
+    logger.info('Cache miss', { hash: metadataHash });
+
+    // 2. 캐시 미스 → OpenAI API 호출
     const categoriesSnapshot = await admin
       .firestore()
       .collection('users')
@@ -112,6 +181,10 @@ export const categorizeLink = onCall<{
         await new Promise((resolve) => setTimeout(resolve, 1000));
       }
     }
+
+    // 2-2-1. API 호출 결과를 캐시에 저장
+    await setCachedCategory(metadataHash, result.categoryPath, result.tags);
+    logger.info('Cache saved', { hash: metadataHash, categoryPath: result.categoryPath });
 
     await createCategoryPath(userId, result.categoryPath);
 
