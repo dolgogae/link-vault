@@ -5,6 +5,16 @@ export interface User {
   createdAt: Date;
   linkCount: number;
   plan: 'free' | 'premium';
+  subscription?: {
+    productId: string;
+    purchaseToken: string;
+    expiresAt: Date;
+    autoRenewing: boolean;
+  };
+  monthlyUsage?: {
+    period: string; // "2026-03" 형식
+    linksSaved: number;
+  };
 }
 
 export interface Category {
