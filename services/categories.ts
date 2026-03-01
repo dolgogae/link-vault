@@ -20,6 +20,8 @@ import {
 import { getFunctions, httpsCallable } from '@react-native-firebase/functions';
 import { Category } from '@/types';
 import { getCategoriesRef, getLinksRef, getUserRef, convertTimestamp } from '@/utils/firestore';
+import { useSubscriptionStore } from '@/stores/subscriptionStore';
+import { PLAN_LIMITS } from '@/constants/subscription';
 
 type DocData = Record<string, any>;
 
@@ -67,6 +69,12 @@ export async function createCategory(
     icon: string;
   },
 ): Promise<string> {
+  const plan = useSubscriptionStore.getState().plan;
+  const maxDepth = PLAN_LIMITS[plan].maxCategoryDepth;
+  if (data.depth >= maxDepth) {
+    throw new Error(`현재 플랜에서는 최대 ${maxDepth}단계 폴더까지 사용할 수 있습니다.`);
+  }
+
   const siblings = await getDocs(
     query(
       getCategoriesRef(userId),

@@ -10,7 +10,13 @@ import 'react-native-reanimated';
 import { useColorScheme } from '@/components/useColorScheme';
 import { Colors } from '@/constants/theme';
 import { useAuthStore } from '@/stores/authStore';
+import { useSubscriptionStore } from '@/stores/subscriptionStore';
 import { onAuthStateChanged, initializeGoogleSignIn } from '@/services/auth';
+import {
+  initIAP, endIAP, verifyAndActivate, subscribeToUserPlan,
+  setupPurchaseListeners, finishTransaction, ErrorCode,
+} from '@/services/subscription';
+import type { Purchase, PurchaseError } from '@/services/subscription';
 import { useShareIntentHandler } from '@/hooks/useShareIntent';
 import { SaveProgressToast } from '@/components/SaveProgressToast';
 
@@ -67,6 +73,53 @@ function RootLayoutNav() {
 
   // Share Extension 핸들러
   useShareIntentHandler();
+
+  // IAP 초기화 + 구매 리스너
+  useEffect(() => {
+    initIAP();
+
+    const { purchaseSub, errorSub } = setupPurchaseListeners(
+      async (purchase: Purchase) => {
+        const token = purchase.purchaseToken;
+        const productId = purchase.productId;
+        if (token && productId) {
+          try {
+            await verifyAndActivate(productId, token);
+            await finishTransaction({ purchase });
+          } catch (error) {
+            console.error('Purchase verification failed:', error);
+          }
+        }
+      },
+      (error: PurchaseError) => {
+        if (error.code !== ErrorCode.UserCancelled) {
+          console.error('Purchase error:', error);
+        }
+      },
+    );
+
+    return () => {
+      purchaseSub.remove();
+      errorSub.remove();
+      endIAP();
+    };
+  }, []);
+
+  // 구독 상태 실시간 동기화
+  useEffect(() => {
+    const userId = user?.uid;
+    if (!userId) return;
+
+    const unsubscribe = subscribeToUserPlan(userId, (plan, monthlyUsage) => {
+      useSubscriptionStore.getState().setPlan(plan);
+      if (monthlyUsage) {
+        useSubscriptionStore.getState().setUsage(monthlyUsage.period, monthlyUsage.linksSaved);
+      }
+      useSubscriptionStore.getState().setLoading(false);
+    });
+
+    return unsubscribe;
+  }, [user?.uid]);
 
   // 인증 상태에 따른 리다이렉트
   useEffect(() => {
