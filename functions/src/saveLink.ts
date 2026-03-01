@@ -38,6 +38,24 @@ export const saveLink = onCall<SaveLinkData>(
       throw new HttpsError('already-exists', '이미 저장된 링크입니다.');
     }
 
+    // 월간 저장 한도 체크
+    const userDoc = await db.collection('users').doc(userId).get();
+    const userData = userDoc.data();
+    const plan = userData?.plan || 'free';
+
+    if (plan === 'free') {
+      const currentPeriod = new Date().toISOString().slice(0, 7); // "2026-03"
+      const usage = userData?.monthlyUsage;
+      const linksSaved = (usage?.period === currentPeriod) ? (usage?.linksSaved || 0) : 0;
+
+      if (linksSaved >= 30) {
+        throw new HttpsError(
+          'resource-exhausted',
+          '이번 달 무료 저장 한도(30개)를 초과했습니다. 프리미엄으로 업그레이드하세요.',
+        );
+      }
+    }
+
     const batch = db.batch();
 
     const linkRef = db.collection('users').doc(userId).collection('links').doc();
@@ -69,6 +87,8 @@ export const saveLink = onCall<SaveLinkData>(
     const userRef = db.collection('users').doc(userId);
     batch.set(userRef, {
       linkCount: admin.firestore.FieldValue.increment(1),
+      'monthlyUsage.linksSaved': admin.firestore.FieldValue.increment(1),
+      'monthlyUsage.period': new Date().toISOString().slice(0, 7),
     }, { merge: true });
 
     try {
