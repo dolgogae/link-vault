@@ -13,6 +13,7 @@ import {
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { analyzeAndSaveLink } from '@/services/links';
 import { useLinkStore } from '@/stores/linkStore';
+import { useSubscriptionStore } from '@/stores/subscriptionStore';
 
 interface AddLinkModalProps {
   visible: boolean;
@@ -24,6 +25,7 @@ export function AddLinkModal({ visible, onClose, onSaved }: AddLinkModalProps) {
   const [url, setUrl] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const { incrementSaveCount } = useLinkStore();
+  const remaining = useSubscriptionStore((s) => s.getMonthlyRemaining());
 
   const isValidUrl = (text: string) => {
     try {
@@ -35,6 +37,17 @@ export function AddLinkModal({ visible, onClose, onSaved }: AddLinkModalProps) {
   };
 
   const handleSave = async () => {
+    if (remaining <= 0) {
+      Alert.alert(
+        '월간 한도 초과',
+        '이번 달 무료 저장 한도(30개)를 모두 사용했습니다.\n프리미엄으로 업그레이드하면 무제한으로 저장할 수 있습니다.',
+        [
+          { text: '확인', style: 'cancel' },
+        ],
+      );
+      return;
+    }
+
     const normalizedUrl = url.startsWith('http') ? url : `https://${url}`;
 
     if (!isValidUrl(normalizedUrl)) {

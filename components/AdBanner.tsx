@@ -1,5 +1,6 @@
 import { View } from 'react-native';
 import { BannerAd, BannerAdSize, TestIds } from 'react-native-google-mobile-ads';
+import { useSubscriptionStore } from '@/stores/subscriptionStore';
 
 const BANNER_AD_UNIT_ID = __DEV__
   ? TestIds.ADAPTIVE_BANNER
@@ -10,7 +11,8 @@ interface AdBannerProps {
 }
 
 export function AdBanner({ show = true }: AdBannerProps) {
-  if (!show) return null;
+  const isPremium = useSubscriptionStore((s) => s.plan === 'premium');
+  if (!show || isPremium) return null;
 
   return (
     <View className="items-center bg-background dark:bg-background-dark py-1">
