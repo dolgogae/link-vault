@@ -1,14 +1,17 @@
 import { useState } from 'react';
-import { View, Text, Pressable, Alert, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, Pressable, Alert, ScrollView, ActivityIndicator, Linking } from 'react-native';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { router } from 'expo-router';
 import { useAuthStore } from '@/stores/authStore';
+import { useSubscriptionStore } from '@/stores/subscriptionStore';
 import { signOut, deleteAccount } from '@/services/auth';
+import { purchaseSubscription, ErrorCode } from '@/services/subscription';
 import { runCleanupManual } from '@/services/categories';
 import Constants from 'expo-constants';
 
 export default function SettingsScreen() {
   const { user } = useAuthStore();
+  const { plan, monthlyLinksSaved } = useSubscriptionStore();
   const [isCleaning, setIsCleaning] = useState(false);
 
   const handleCleanup = async () => {
@@ -72,6 +75,48 @@ export default function SettingsScreen() {
           {user?.email || ''}
         </Text>
       </View>
+
+      <SectionHeader title="구독" />
+      {plan === 'premium' ? (
+        <>
+          <SettingRow
+            icon="star"
+            label="현재 플랜"
+            value="프리미엄"
+          />
+          <SettingRow
+            icon="cog"
+            label="구독 관리"
+            onPress={() => Linking.openURL('https://play.google.com/store/account/subscriptions')}
+          />
+        </>
+      ) : (
+        <>
+          <SettingRow
+            icon="star-o"
+            label="현재 플랜"
+            value="무료"
+          />
+          <SettingRow
+            icon="bar-chart"
+            label="이번 달 저장"
+            value={`${monthlyLinksSaved} / 30`}
+          />
+          <SettingRow
+            icon="diamond"
+            label="프리미엄으로 업그레이드"
+            onPress={async () => {
+              try {
+                await purchaseSubscription();
+              } catch (error: any) {
+                if (error.code !== ErrorCode.UserCancelled) {
+                  Alert.alert('오류', '구매 처리에 실패했습니다.');
+                }
+              }
+            }}
+          />
+        </>
+      )}
 
       <SectionHeader title="정보" />
       <SettingRow
