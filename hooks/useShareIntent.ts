@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useShareIntent } from 'expo-share-intent';
 import { useAuthStore } from '@/stores/authStore';
 import { useLinkStore } from '@/stores/linkStore';
+import { useSubscriptionStore } from '@/stores/subscriptionStore';
 import { analyzeAndSaveLink } from '@/services/links';
 
 export function useShareIntentHandler() {
@@ -23,6 +24,12 @@ export function useShareIntentHandler() {
   }, [shareIntent, user]);
 
   const handleSharedUrl = async (url: string) => {
+    const remaining = useSubscriptionStore.getState().getMonthlyRemaining();
+    if (remaining <= 0) {
+      setSaveResult({ type: 'error', message: '이번 달 무료 저장 한도(30개)를 초과했습니다.' });
+      return;
+    }
+
     setSaving(true);
     setSaveResult(null);
     try {

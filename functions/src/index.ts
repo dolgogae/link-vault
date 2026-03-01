@@ -5,6 +5,7 @@ export { categorizeLink } from './categorize';
 export { saveLink } from './saveLink';
 
 export { cleanupCategories } from './cleanupCategories';
+export { verifyPurchase } from './verifyPurchase';
 
 export const healthCheck = onRequest((req, res) => {
   res.json({
