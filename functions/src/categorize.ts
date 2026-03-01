@@ -165,8 +165,12 @@ export const categorizeLink = onCall<{
           name.replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/gu, '').trim(),
         );
 
-        if (result.categoryPath.length > 4) {
-          result.categoryPath = result.categoryPath.slice(0, 4);
+        const userDoc = await admin.firestore().collection('users').doc(userId).get();
+        const userPlan = userDoc.data()?.plan || 'free';
+        const maxDepth = userPlan === 'premium' ? 4 : 2;
+
+        if (result.categoryPath.length > maxDepth) {
+          result.categoryPath = result.categoryPath.slice(0, maxDepth);
         }
 
         break;
