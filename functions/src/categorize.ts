@@ -76,15 +76,15 @@ export const categorizeLink = onCall<{
     const metadataHash = generateMetadataHash(metadata);
     const cached = await getCachedCategory(metadataHash);
 
-    if (cached) {
+    const BLOCKED_ROOT_NAMES = ['콘텐츠', '미디어', '소셜 미디어', 'SNS', '온라인'];
+
+    if (cached && !BLOCKED_ROOT_NAMES.includes(cached.categoryPath[0])) {
       logger.info('Cache hit', { hash: metadataHash, categoryPath: cached.categoryPath });
 
-      // 캐시된 카테고리 경로를 현재 사용자에게도 생성
-      await createCategoryPath(userId, cached.categoryPath);
-      const categoryIds = await resolveCategoryIds(userId, cached.categoryPath);
+      const categoryIds = await ensureCategoryPath(userId, cached.categoryPath);
 
       if (categoryIds.length === 0) {
-        logger.error('resolveCategoryIds returned empty (cached)', {
+        logger.error('ensureCategoryPath returned empty (cached)', {
           userId,
           categoryPath: cached.categoryPath,
         });
@@ -190,12 +190,10 @@ export const categorizeLink = onCall<{
     await setCachedCategory(metadataHash, result.categoryPath, result.tags);
     logger.info('Cache saved', { hash: metadataHash, categoryPath: result.categoryPath });
 
-    await createCategoryPath(userId, result.categoryPath);
-
-    const categoryIds = await resolveCategoryIds(userId, result.categoryPath);
+    const categoryIds = await ensureCategoryPath(userId, result.categoryPath);
 
     if (categoryIds.length === 0) {
-      logger.error('resolveCategoryIds returned empty', {
+      logger.error('ensureCategoryPath returned empty', {
         userId,
         categoryPath: result.categoryPath,
       });
@@ -231,8 +229,19 @@ function buildSystemPrompt(categoryTree: string): string {
 
 ### 잘못된 분류 예시 (절대 금지)
 - ❌ ["콘텐츠", "소셜 미디어", "인스타그램"]
+- ❌ ["콘텐츠", "미디어"] — "콘텐츠"나 "미디어"는 너무 포괄적이라 최상위 카테고리로 절대 사용 금지
 - ❌ ["미디어", "동영상", "유튜브"]
 - ❌ ["SNS", "트위터"]
+- ❌ 최상위 카테고리가 "콘텐츠", "미디어", "소셜 미디어", "SNS", "온라인" 등 모호한 이름인 경우
+
+### 소셜 미디어 링크 분류 핵심 원칙
+소셜 미디어(인스타그램, 유튜브, 트위터, 틱톡 등) 링크는 **게시물이 다루는 실제 주제**로 분류하세요.
+주제를 특정하기 어려운 경우에도 "콘텐츠/미디어" 같은 모호한 분류 대신, 가장 가까운 구체적 주제를 선택하세요.
+- 패션/뷰티 계정 → ["라이프스타일", "패션"] 또는 ["라이프스타일", "뷰티"]
+- 맛집/카페 게시물 → ["라이프스타일", "맛집"]
+- 일상/브이로그 → ["라이프스타일", "일상"]
+- 밈/유머 → ["엔터테인먼트", "유머"]
+- 뉴스/시사 → ["뉴스", "시사"]
 
 ## 규칙
 1. 기존 카테고리 트리를 참고하여 가장 적합한 카테고리에 배치하세요.
@@ -294,41 +303,43 @@ function formatCategoryTree(tree: CategoryTree[], indent = 0): string {
     .join('\n');
 }
 
-async function createCategoryPath(
+/**
+ * 카테고리 경로를 생성하면서 동시에 ID를 수집 (기존 2함수 통합 → 쿼리 횟수 절반)
+ */
+async function ensureCategoryPath(
   userId: string,
   path: string[],
-): Promise<void> {
+): Promise<string[]> {
   const db = admin.firestore();
+  const categoriesRef = db
+    .collection('users')
+    .doc(userId)
+    .collection('categories');
+  const ids: string[] = [];
   let parentId: string | null = null;
 
   for (let depth = 0; depth < path.length; depth++) {
     const name = path[depth];
-    const categoriesRef = db
-      .collection('users')
-      .doc(userId)
-      .collection('categories');
 
-    let query = categoriesRef.where('name', '==', name).where('depth', '==', depth);
-    if (parentId !== null) {
-      query = query.where('parentId', '==', parentId);
-    } else {
-      query = query.where('parentId', '==', null);
-    }
+    let q = categoriesRef.where('name', '==', name).where('depth', '==', depth);
+    q = parentId !== null
+      ? q.where('parentId', '==', parentId)
+      : q.where('parentId', '==', null);
 
-    const existing = await query.get();
+    const existing = await q.get();
     if (!existing.empty) {
       parentId = existing.docs[0].id;
+      ids.push(parentId);
       continue;
     }
 
-    let fallbackQuery = categoriesRef.where('depth', '==', depth);
-    if (parentId !== null) {
-      fallbackQuery = fallbackQuery.where('parentId', '==', parentId);
-    } else {
-      fallbackQuery = fallbackQuery.where('parentId', '==', null);
-    }
+    // 이모지 포함된 기존 카테고리 fallback 검색
+    let fallbackQ = categoriesRef.where('depth', '==', depth);
+    fallbackQ = parentId !== null
+      ? fallbackQ.where('parentId', '==', parentId)
+      : fallbackQ.where('parentId', '==', null);
 
-    const allAtLevel = await fallbackQuery.get();
+    const allAtLevel = await fallbackQ.get();
     const emojiMatch = allAtLevel.docs.find((doc) => {
       const docName: string = doc.data().name || '';
       const stripped = docName
@@ -340,6 +351,7 @@ async function createCategoryPath(
     if (emojiMatch) {
       await categoriesRef.doc(emojiMatch.id).update({ name, icon: '' });
       parentId = emojiMatch.id;
+      ids.push(parentId);
       continue;
     }
 
@@ -354,38 +366,7 @@ async function createCategoryPath(
     });
 
     parentId = newCat.id;
-  }
-}
-
-async function resolveCategoryIds(
-  userId: string,
-  path: string[],
-): Promise<string[]> {
-  const db = admin.firestore();
-  const ids: string[] = [];
-  let parentId: string | null = null;
-
-  for (let depth = 0; depth < path.length; depth++) {
-    const name = path[depth];
-    let query = db
-      .collection('users')
-      .doc(userId)
-      .collection('categories')
-      .where('name', '==', name)
-      .where('depth', '==', depth);
-
-    if (parentId !== null) {
-      query = query.where('parentId', '==', parentId);
-    } else {
-      query = query.where('parentId', '==', null);
-    }
-
-    const snapshot = await query.get();
-    if (snapshot.empty) break;
-
-    const id = snapshot.docs[0].id;
-    ids.push(id);
-    parentId = id;
+    ids.push(parentId);
   }
 
   return ids;

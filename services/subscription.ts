@@ -10,8 +10,9 @@ import {
   ErrorCode,
 } from 'react-native-iap';
 import type { Purchase, PurchaseError, EventSubscription } from 'react-native-iap';
-import functions from '@react-native-firebase/functions';
-import firestore from '@react-native-firebase/firestore';
+import { getFunctions, httpsCallable } from '@react-native-firebase/functions';
+import { onSnapshot } from '@react-native-firebase/firestore';
+import { getUserRef } from '@/utils/firestore';
 import { PRODUCT_ID } from '@/constants/subscription';
 
 export async function initIAP(): Promise<void> {
@@ -38,7 +39,8 @@ export async function verifyAndActivate(
   productId: string,
   purchaseToken: string,
 ): Promise<{ valid: boolean; plan: string; expiresAt?: number }> {
-  const result = await functions().httpsCallable('verifyPurchase')({
+  const fns = getFunctions();
+  const result = await httpsCallable(fns, 'verifyPurchase')({
     productId,
     purchaseToken,
   });
@@ -67,13 +69,10 @@ export function subscribeToUserPlan(
   userId: string,
   callback: (plan: 'free' | 'premium', monthlyUsage?: { period: string; linksSaved: number }) => void,
 ) {
-  return firestore()
-    .collection('users')
-    .doc(userId)
-    .onSnapshot((snapshot) => {
-      const data = snapshot.data();
-      callback(data?.plan || 'free', data?.monthlyUsage);
-    });
+  return onSnapshot(getUserRef(userId), (snapshot) => {
+    const data = snapshot.data();
+    callback(data?.plan || 'free', data?.monthlyUsage);
+  });
 }
 
 export { finishTransaction, ErrorCode };

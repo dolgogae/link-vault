@@ -85,11 +85,21 @@ export const saveLink = onCall<SaveLinkData>(
     }
 
     const userRef = db.collection('users').doc(userId);
-    batch.set(userRef, {
-      linkCount: admin.firestore.FieldValue.increment(1),
-      'monthlyUsage.linksSaved': admin.firestore.FieldValue.increment(1),
-      'monthlyUsage.period': new Date().toISOString().slice(0, 7),
-    }, { merge: true });
+    const currentPeriod = new Date().toISOString().slice(0, 7);
+    const storedPeriod = userData?.monthlyUsage?.period;
+
+    if (storedPeriod === currentPeriod) {
+      batch.set(userRef, {
+        linkCount: admin.firestore.FieldValue.increment(1),
+        'monthlyUsage.linksSaved': admin.firestore.FieldValue.increment(1),
+      }, { merge: true });
+    } else {
+      // 월이 바뀌면 카운터 리셋
+      batch.set(userRef, {
+        linkCount: admin.firestore.FieldValue.increment(1),
+        monthlyUsage: { linksSaved: 1, period: currentPeriod },
+      }, { merge: true });
+    }
 
     try {
       await batch.commit();

@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { AppState, AppStateStatus } from 'react-native';
 import { onSnapshot, FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
 import { convertTimestamp } from '@/utils/firestore';
 
@@ -11,6 +12,20 @@ export function useFirestoreQuery<T>(
   const [data, setData] = useState<T[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const [retryKey, setRetryKey] = useState(0);
+  const appStateRef = useRef(AppState.currentState);
+
+  // 앱 포그라운드 복귀 시 재구독
+  useEffect(() => {
+    const handleAppState = (nextState: AppStateStatus) => {
+      if (appStateRef.current.match(/inactive|background/) && nextState === 'active') {
+        setRetryKey((k) => k + 1);
+      }
+      appStateRef.current = nextState;
+    };
+    const sub = AppState.addEventListener('change', handleAppState);
+    return () => sub.remove();
+  }, []);
 
   useEffect(() => {
     if (!queryFn) {
@@ -47,7 +62,7 @@ export function useFirestoreQuery<T>(
     );
 
     return () => unsubscribe();
-  }, deps);
+  }, [...deps, retryKey]);
 
   return { data, loading, error };
 }

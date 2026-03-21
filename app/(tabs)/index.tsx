@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo, useEffect, useLayoutEffect } from 'react';
-import { View, Text, FlatList, ScrollView, Pressable, RefreshControl, Alert } from 'react-native';
+import { View, Text, FlatList, ScrollView, Pressable, RefreshControl, Alert, BackHandler } from 'react-native';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useNavigation } from 'expo-router';
 
@@ -14,6 +14,7 @@ import { MoveLinkModal } from '@/components/MoveLinkModal';
 import { RenameToast } from '@/components/RenameToast';
 import { AdBanner } from '@/components/AdBanner';
 import { EmptyState } from '@/components/EmptyState';
+import { FolderTreeView } from '@/components/FolderTreeView';
 import { useInterstitialAd } from '@/hooks/useInterstitialAd';
 import { Category, Link } from '@/types';
 import * as WebBrowser from 'expo-web-browser';
@@ -31,6 +32,9 @@ export default function HomeScreen() {
   const [showRenameToast, setShowRenameToast] = useState(false);
   const [movingLink, setMovingLink] = useState<Link | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+
+  // 루트 레벨인지 여부
+  const isRoot = breadcrumb.length === 0;
 
   useInterstitialAd();
 
@@ -113,7 +117,7 @@ export default function HomeScreen() {
     if (linkError) console.error('[Home] linkError:', linkError.message);
   }, [childCategories, currentLinks, catError, linkError, currentCategoryId]);
 
-  // 폴더 탐색
+  // 루트 폴더 탭 → 해당 폴더 안으로 진입 (breadcrumb 1단계)
   const navigateInto = useCallback((category: Category) => {
     setCurrentCategoryId(category.id);
     setBreadcrumb((prev) => [...prev, { id: category.id, name: category.name }]);
@@ -121,7 +125,6 @@ export default function HomeScreen() {
 
   const navigateTo = useCallback((index: number) => {
     if (index < 0) {
-      // Go to root
       setCurrentCategoryId(null);
       setBreadcrumb([]);
     } else {
@@ -132,6 +135,19 @@ export default function HomeScreen() {
       });
     }
   }, []);
+
+  // 하드웨어 뒤로가기 → 루트로 복귀
+  useEffect(() => {
+    const onBackPress = () => {
+      if (breadcrumb.length > 0) {
+        navigateTo(-1);
+        return true;
+      }
+      return false;
+    };
+    const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => sub.remove();
+  }, [breadcrumb.length, navigateTo]);
 
   const handleCategoryLongPress = (category: Category) => {
     setSelectedCategory(category);
@@ -234,9 +250,7 @@ export default function HomeScreen() {
 
   return (
     <View className="flex-1 bg-background dark:bg-background-dark">
-      <FlatList
-        data={currentLinks}
-        keyExtractor={(item) => item.id}
+      <ScrollView
         contentContainerStyle={
           isEmpty && !isLoading ? { flex: 1 } : { paddingBottom: 40 }
         }
@@ -247,134 +261,164 @@ export default function HomeScreen() {
             tintColor="#8000C8"
           />
         }
-        ListHeaderComponent={
-          <>
-            {/* 브레드크럼 네비게이션 */}
-            {breadcrumb.length > 0 && (
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 14, paddingBottom: 6, alignItems: 'center' }}
-              >
-                <Pressable
-                  onPress={() => navigateTo(-1)}
-                  className="flex-row items-center h-10 px-3.5 rounded-full bg-surface dark:bg-surface-dark mr-1.5"
-                >
-                  <FontAwesome name="home" size={15} color="#8000C8" />
-                </Pressable>
-                {breadcrumb.map((crumb, index) => {
-                  const isLast = index === breadcrumb.length - 1;
-                  return (
-                    <View key={`${crumb.id}-${index}`} className="flex-row items-center">
-                      <FontAwesome name="chevron-right" size={10} color="#9CA3AF" style={{ marginHorizontal: 6 }} />
-                      <Pressable
-                        onPress={isLast ? undefined : () => navigateTo(index)}
-                        className={`h-10 px-4 rounded-full items-center justify-center ${
-                          isLast
-                            ? 'bg-primary'
-                            : 'bg-surface dark:bg-surface-dark'
-                        }`}
-                      >
-                        <Text
-                          className={`text-sm font-medium ${
-                            isLast
-                              ? 'text-white'
-                              : 'text-text dark:text-text-dark'
-                          }`}
-                          numberOfLines={1}
-                        >
-                          {crumb.name}
-                        </Text>
-                      </Pressable>
-                    </View>
-                  );
-                })}
-              </ScrollView>
-            )}
-
-            {/* 에러 배너 */}
-            {hasError && (
-              <Pressable
-                onPress={() => setRefreshKey((k) => k + 1)}
-                className="mx-6 mt-3 mb-1 p-3.5 bg-red-50 dark:bg-red-900/20 rounded-xl"
-              >
-                <Text className="text-red-600 dark:text-red-400 text-sm">
-                  데이터를 불러오지 못했습니다. 탭하여 다시 시도
-                </Text>
-                <Text className="text-red-400/70 text-xs mt-1" numberOfLines={2}>
-                  {catError?.message || linkError?.message}
-                </Text>
-              </Pressable>
-            )}
-
-            {/* 폴더 섹션 */}
-            {childCategories.length > 0 && (
-              <View className="pt-5">
-                <View className="flex-row items-center justify-between px-6 mb-3">
-                  <Text className="text-sm font-semibold text-text-secondary dark:text-text-dark-secondary">
-                    폴더
-                  </Text>
+      >
+        {/* 브레드크럼 네비게이션 */}
+        {breadcrumb.length > 0 && (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 14, paddingBottom: 6, alignItems: 'center' }}
+          >
+            <Pressable
+              onPress={() => navigateTo(-1)}
+              className="flex-row items-center h-10 px-3.5 rounded-full bg-surface dark:bg-surface-dark mr-1.5"
+            >
+              <FontAwesome name="home" size={15} color="#8000C8" />
+            </Pressable>
+            {breadcrumb.map((crumb, index) => {
+              const isLast = index === breadcrumb.length - 1;
+              return (
+                <View key={`${crumb.id}-${index}`} className="flex-row items-center">
+                  <FontAwesome name="chevron-right" size={10} color="#9CA3AF" style={{ marginHorizontal: 6 }} />
                   <Pressable
-                    onPress={handlePruneEmpty}
-                    className="py-1.5 px-3 rounded-lg active:bg-surface dark:active:bg-surface-dark"
+                    onPress={isLast ? undefined : () => navigateTo(index)}
+                    className={`h-10 px-4 rounded-full items-center justify-center ${
+                      isLast
+                        ? 'bg-primary'
+                        : 'bg-surface dark:bg-surface-dark'
+                    }`}
                   >
-                    <Text className="text-sm text-text-secondary/60 dark:text-text-dark-secondary/60">
-                      빈폴더 정리
+                    <Text
+                      className={`text-sm font-medium ${
+                        isLast
+                          ? 'text-white'
+                          : 'text-text dark:text-text-dark'
+                      }`}
+                      numberOfLines={1}
+                    >
+                      {crumb.name}
                     </Text>
                   </Pressable>
                 </View>
-                <View className="flex-row flex-wrap px-5">
-                  {childCategories.map((cat) => (
-                    <CategoryFolder
-                      key={cat.id}
-                      category={cat}
-                      onPress={navigateInto}
-                      onLongPress={handleCategoryLongPress}
-                    />
-                  ))}
-                </View>
+              );
+            })}
+          </ScrollView>
+        )}
+
+        {/* 에러 배너 */}
+        {hasError && (
+          <Pressable
+            onPress={() => setRefreshKey((k) => k + 1)}
+            className="mx-6 mt-3 mb-1 p-3.5 bg-red-50 dark:bg-red-900/20 rounded-xl"
+          >
+            <Text className="text-red-600 dark:text-red-400 text-sm">
+              데이터를 불러오지 못했습니다. 탭하여 다시 시도
+            </Text>
+            <Text className="text-red-400/70 text-xs mt-1" numberOfLines={2}>
+              {catError?.message || linkError?.message}
+            </Text>
+          </Pressable>
+        )}
+
+        {/* ── 루트: 기존 폴더 그리드 ── */}
+        {isRoot && childCategories.length > 0 && (
+          <View className="pt-5">
+            <View className="flex-row items-center justify-between px-6 mb-3">
+              <Text className="text-sm font-semibold text-text-secondary dark:text-text-dark-secondary">
+                폴더
+              </Text>
+              <Pressable
+                onPress={handlePruneEmpty}
+                className="py-1.5 px-3 rounded-lg active:bg-surface dark:active:bg-surface-dark"
+              >
+                <Text className="text-sm text-text-secondary/60 dark:text-text-dark-secondary/60">
+                  빈폴더 정리
+                </Text>
+              </Pressable>
+            </View>
+            <View className="flex-row flex-wrap px-5">
+              {childCategories.map((cat) => (
+                <CategoryFolder
+                  key={cat.id}
+                  category={cat}
+                  onPress={navigateInto}
+                  onLongPress={handleCategoryLongPress}
+                />
+              ))}
+            </View>
+          </View>
+        )}
+
+        {/* ── 폴더 안: 트리 뷰 (들여쓰기 펼침/접기) ── */}
+        {!isRoot && (
+          <View className="pt-3">
+            <View className="flex-row items-center justify-between px-6 mb-2">
+              <Text className="text-sm font-semibold text-text-secondary dark:text-text-dark-secondary">
+                폴더
+              </Text>
+              <Pressable
+                onPress={handlePruneEmpty}
+                className="py-1.5 px-3 rounded-lg active:bg-surface dark:active:bg-surface-dark"
+              >
+                <Text className="text-sm text-text-secondary/60 dark:text-text-dark-secondary/60">
+                  빈폴더 정리
+                </Text>
+              </Pressable>
+            </View>
+
+            {/* 하위 폴더 트리 */}
+            {childCategories.length > 0 && (
+              <FolderTreeView
+                categories={childCategories}
+                allLinks={allLinks}
+                onCategoryLongPress={handleCategoryLongPress}
+                onLinkPress={handleLinkPress}
+                onFavoritePress={handleFavoritePress}
+                onDeletePress={handleDeleteLink}
+                onMovePress={(l) => setMovingLink(l)}
+              />
+            )}
+
+            {/* 현재 폴더의 직속 링크 */}
+            {currentLinks.length > 0 && (
+              <View className="mt-2">
+                {childCategories.length > 0 && (
+                  <View className="h-px bg-surface dark:bg-surface-dark mx-6 mb-2" />
+                )}
+                {currentLinks.map((link) => (
+                  <LinkCard
+                    key={link.id}
+                    link={link}
+                    onPress={handleLinkPress}
+                    onFavoritePress={handleFavoritePress}
+                    onDeletePress={handleDeleteLink}
+                    onMovePress={(l) => setMovingLink(l)}
+                    viewMode="list"
+                  />
+                ))}
               </View>
             )}
 
-            {/* 링크 섹션 구분 */}
-            {currentLinks.length > 0 && childCategories.length > 0 && (
-              <View className="h-px bg-surface dark:bg-surface-dark mx-6 mt-2 mb-2" />
+            {/* 비어있음 */}
+            {childCategories.length === 0 && currentLinks.length === 0 && !isLoading && (
+              <EmptyState
+                icon="folder-open-o"
+                title="이 폴더가 비어있습니다"
+              />
             )}
-          </>
-        }
-        ListEmptyComponent={
-          !isLoading && isEmpty ? (
-            <EmptyState
-              icon="folder-open-o"
-              title={
-                currentCategoryId
-                  ? '이 폴더가 비어있습니다'
-                  : '아직 저장된 링크가 없습니다'
-              }
-              subtitle={
-                currentCategoryId
-                  ? undefined
-                  : '링크를 저장하면 AI가 자동으로 폴더에 분류합니다'
-              }
-              action={
-                currentCategoryId
-                  ? undefined
-                  : { label: '첫 링크 저장하기', onPress: () => setShowAddModal(true) }
-              }
-            />
-          ) : null
-        }
-        renderItem={({ item: link }) => (
-          <LinkCard
-            link={link}
-            onPress={handleLinkPress}
-            onFavoritePress={handleFavoritePress}
-            onDeletePress={handleDeleteLink}
-            onMovePress={(l) => setMovingLink(l)}
-            viewMode="list"
+          </View>
+        )}
+
+        {/* ── 루트 비어있음 ── */}
+        {isRoot && isEmpty && !isLoading && (
+          <EmptyState
+            icon="folder-open-o"
+            title="아직 저장된 링크가 없습니다"
+            subtitle="링크를 저장하면 AI가 자동으로 폴더에 분류합니다"
+            action={{ label: '첫 링크 저장하기', onPress: () => setShowAddModal(true) }}
           />
         )}
-      />
+      </ScrollView>
 
       {/* FAB — 링크 추가 */}
       <Pressable
@@ -395,13 +439,11 @@ export default function HomeScreen() {
         visible={showAddModal}
         onClose={() => setShowAddModal(false)}
         onSaved={(categoryPath, categoryIds) => {
-          // 저장된 폴더로 바로 이동
-          const leafId = categoryIds[categoryIds.length - 1];
-          if (leafId) {
-            setCurrentCategoryId(leafId);
-            setBreadcrumb(
-              categoryIds.map((id, i) => ({ id, name: categoryPath[i] })),
-            );
+          // 저장 후 해당 루트 폴더로 이동 (트리가 펼쳐지는 방식이므로 루트만)
+          const rootId = categoryIds[0];
+          if (rootId) {
+            setCurrentCategoryId(rootId);
+            setBreadcrumb([{ id: rootId, name: categoryPath[0] }]);
           }
         }}
       />

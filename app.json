@@ -56,6 +56,13 @@
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "ed6cae4e-f8a5-47ee-9549-ab85da58381a"
+      }
+    },
+    "owner": "dolgogae"
   }
 }
