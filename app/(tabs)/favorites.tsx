@@ -4,9 +4,11 @@ import * as WebBrowser from 'expo-web-browser';
 
 import { useAuthStore } from '@/stores/authStore';
 import { useFirestoreQuery } from '@/hooks/useFirestoreQuery';
+import { useLinkActions } from '@/hooks/useLinkActions';
 import { getFavoriteLinksQuery, toggleFavorite } from '@/services/links';
 import { LinkCard } from '@/components/LinkCard';
 import { EmptyState } from '@/components/EmptyState';
+import { MoveLinkModal } from '@/components/MoveLinkModal';
 import { Link } from '@/types';
 
 export default function FavoritesScreen() {
@@ -18,6 +20,14 @@ export default function FavoritesScreen() {
     userId ? () => getFavoriteLinksQuery(userId) : null,
     [userId, refreshKey],
   );
+
+  const {
+    movingLink,
+    setMovingLink,
+    handleDeleteLink,
+    handleMoveLink,
+    handleLinkLongPress,
+  } = useLinkActions(userId, () => setRefreshKey((k) => k + 1));
 
   const handleLinkPress = async (link: Link) => {
     await WebBrowser.openBrowserAsync(link.url);
@@ -53,9 +63,19 @@ export default function FavoritesScreen() {
             link={item}
             onPress={handleLinkPress}
             onFavoritePress={handleFavoritePress}
+            onDeletePress={handleDeleteLink}
+            onMovePress={(link) => setMovingLink(link)}
+            onLongPress={handleLinkLongPress}
             viewMode="list"
           />
         )}
+      />
+
+      <MoveLinkModal
+        visible={!!movingLink}
+        link={movingLink}
+        onMove={handleMoveLink}
+        onClose={() => setMovingLink(null)}
       />
     </View>
   );

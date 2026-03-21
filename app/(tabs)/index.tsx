@@ -5,8 +5,9 @@ import { useNavigation } from 'expo-router';
 
 import { useAuthStore } from '@/stores/authStore';
 import { useFirestoreQuery } from '@/hooks/useFirestoreQuery';
+import { useLinkActions } from '@/hooks/useLinkActions';
 import { getRootCategoriesQuery, getChildCategoriesQuery, renameCategory, deleteCategory as deleteCategoryService, runCleanupIfNeeded, pruneAllEmptyCategories } from '@/services/categories';
-import { getLinksQuery, toggleFavorite, deleteLink, moveLink } from '@/services/links';
+import { getLinksQuery, toggleFavorite } from '@/services/links';
 import { CategoryFolder } from '@/components/CategoryFolder';
 import { LinkCard } from '@/components/LinkCard';
 import { AddLinkModal } from '@/components/AddLinkModal';
@@ -30,11 +31,18 @@ export default function HomeScreen() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [showRenameToast, setShowRenameToast] = useState(false);
-  const [movingLink, setMovingLink] = useState<Link | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
   // 루트 레벨인지 여부
   const isRoot = breadcrumb.length === 0;
+
+  const {
+    movingLink,
+    setMovingLink,
+    handleDeleteLink,
+    handleMoveLink,
+    handleLinkLongPress,
+  } = useLinkActions(userId, () => setRefreshKey((k) => k + 1));
 
   useInterstitialAd();
 
@@ -216,33 +224,6 @@ export default function HomeScreen() {
     await toggleFavorite(userId, link.id, link.isFavorite);
   };
 
-  const handleDeleteLink = (link: Link) => {
-    Alert.alert('링크 삭제', `"${link.title}"을(를) 삭제하시겠습니까?`, [
-      { text: '취소', style: 'cancel' },
-      {
-        text: '삭제',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await deleteLink(userId, link.id, link.categoryPath);
-            setRefreshKey((k) => k + 1);
-          } catch {
-            Alert.alert('오류', '링크 삭제에 실패했습니다.');
-          }
-        },
-      },
-    ]);
-  };
-
-  const handleMoveLink = async (link: Link, newCategoryPath: string[]) => {
-    try {
-      await moveLink(userId, link.id, link.categoryPath, newCategoryPath);
-      setMovingLink(null);
-      setRefreshKey((k) => k + 1);
-    } catch {
-      Alert.alert('오류', '링크 이동에 실패했습니다.');
-    }
-  };
 
   const isLoading = loadingCats || loadingLinks;
   const hasError = catError || linkError;
@@ -373,6 +354,7 @@ export default function HomeScreen() {
                 allLinks={allLinks}
                 onCategoryLongPress={handleCategoryLongPress}
                 onLinkPress={handleLinkPress}
+                onLinkLongPress={handleLinkLongPress}
                 onFavoritePress={handleFavoritePress}
                 onDeletePress={handleDeleteLink}
                 onMovePress={(l) => setMovingLink(l)}
@@ -393,6 +375,7 @@ export default function HomeScreen() {
                     onFavoritePress={handleFavoritePress}
                     onDeletePress={handleDeleteLink}
                     onMovePress={(l) => setMovingLink(l)}
+                    onLongPress={handleLinkLongPress}
                     viewMode="list"
                   />
                 ))}

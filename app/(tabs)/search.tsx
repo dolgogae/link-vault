@@ -3,9 +3,11 @@ import { View, FlatList, ActivityIndicator } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 
 import { useAuthStore } from '@/stores/authStore';
+import { useLinkActions } from '@/hooks/useLinkActions';
 import { SearchBar } from '@/components/SearchBar';
 import { LinkCard } from '@/components/LinkCard';
 import { EmptyState } from '@/components/EmptyState';
+import { MoveLinkModal } from '@/components/MoveLinkModal';
 import { searchLinks, toggleFavorite } from '@/services/links';
 import { Link } from '@/types';
 
@@ -17,6 +19,23 @@ export default function SearchScreen() {
   const [hasSearched, setHasSearched] = useState(false);
 
   const userId = user?.uid || '';
+
+  const refreshResults = useCallback(async () => {
+    if (!userId || !query.trim()) {
+      setResults([]);
+      return;
+    }
+    const found = await searchLinks(userId, query.trim());
+    setResults(found);
+  }, [query, userId]);
+
+  const {
+    movingLink,
+    setMovingLink,
+    handleDeleteLink,
+    handleMoveLink,
+    handleLinkLongPress,
+  } = useLinkActions(userId, refreshResults);
 
   const handleSearch = useCallback(
     async (text: string) => {
@@ -90,9 +109,19 @@ export default function SearchScreen() {
             link={item}
             onPress={handleLinkPress}
             onFavoritePress={handleFavoritePress}
+            onDeletePress={handleDeleteLink}
+            onMovePress={(link) => setMovingLink(link)}
+            onLongPress={handleLinkLongPress}
             viewMode="list"
           />
         )}
+      />
+
+      <MoveLinkModal
+        visible={!!movingLink}
+        link={movingLink}
+        onMove={handleMoveLink}
+        onClose={() => setMovingLink(null)}
       />
     </View>
   );

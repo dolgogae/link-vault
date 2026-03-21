@@ -1,12 +1,10 @@
 import { useState, useMemo, useCallback } from 'react';
 import { View, Text, Pressable, Image } from 'react-native';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { Swipeable } from 'react-native-gesture-handler';
 import { useAuthStore } from '@/stores/authStore';
 import { useFirestoreQuery } from '@/hooks/useFirestoreQuery';
 import { getChildCategoriesQuery } from '@/services/categories';
 import { Category, Link } from '@/types';
-import { getTimeAgo } from '@/utils/time';
 
 const INDENT_PX = 24;
 
@@ -15,6 +13,7 @@ function TreeLinkItem({
   link,
   depth,
   onPress,
+  onLongPress,
   onFavoritePress,
   onDeletePress,
   onMovePress,
@@ -22,6 +21,7 @@ function TreeLinkItem({
   link: Link;
   depth: number;
   onPress: (link: Link) => void;
+  onLongPress: (link: Link) => void;
   onFavoritePress: (link: Link) => void;
   onDeletePress: (link: Link) => void;
   onMovePress: (link: Link) => void;
@@ -29,7 +29,7 @@ function TreeLinkItem({
   return (
     <Pressable
       onPress={() => onPress(link)}
-      onLongPress={() => onDeletePress(link)}
+      onLongPress={() => onLongPress(link)}
       style={{ paddingLeft: depth * INDENT_PX + 12 }}
       className="flex-row items-center py-2 pr-4 active:bg-surface dark:active:bg-surface-dark"
     >
@@ -78,6 +78,7 @@ function FolderTreeNode({
   depth,
   onCategoryLongPress,
   onLinkPress,
+  onLinkLongPress,
   onFavoritePress,
   onDeletePress,
   onMovePress,
@@ -87,6 +88,7 @@ function FolderTreeNode({
   depth: number;
   onCategoryLongPress: (cat: Category) => void;
   onLinkPress: (link: Link) => void;
+  onLinkLongPress: (link: Link) => void;
   onFavoritePress: (link: Link) => void;
   onDeletePress: (link: Link) => void;
   onMovePress: (link: Link) => void;
@@ -158,6 +160,7 @@ function FolderTreeNode({
               depth={depth + 1}
               onCategoryLongPress={onCategoryLongPress}
               onLinkPress={onLinkPress}
+              onLinkLongPress={onLinkLongPress}
               onFavoritePress={onFavoritePress}
               onDeletePress={onDeletePress}
               onMovePress={onMovePress}
@@ -169,6 +172,7 @@ function FolderTreeNode({
               link={link}
               depth={depth + 1}
               onPress={onLinkPress}
+              onLongPress={onLinkLongPress}
               onFavoritePress={onFavoritePress}
               onDeletePress={onDeletePress}
               onMovePress={onMovePress}
@@ -194,6 +198,7 @@ export function FolderTreeView({
   allLinks,
   onCategoryLongPress,
   onLinkPress,
+  onLinkLongPress,
   onFavoritePress,
   onDeletePress,
   onMovePress,
@@ -202,6 +207,7 @@ export function FolderTreeView({
   allLinks: Link[];
   onCategoryLongPress: (cat: Category) => void;
   onLinkPress: (link: Link) => void;
+  onLinkLongPress: (link: Link) => void;
   onFavoritePress: (link: Link) => void;
   onDeletePress: (link: Link) => void;
   onMovePress: (link: Link) => void;
@@ -216,6 +222,7 @@ export function FolderTreeView({
           depth={0}
           onCategoryLongPress={onCategoryLongPress}
           onLinkPress={onLinkPress}
+          onLinkLongPress={onLinkLongPress}
           onFavoritePress={onFavoritePress}
           onDeletePress={onDeletePress}
           onMovePress={onMovePress}
