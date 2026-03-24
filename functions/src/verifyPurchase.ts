@@ -23,7 +23,7 @@ export const verifyPurchase = onCall<VerifyPurchaseData>(
 
     const userId = request.auth.uid;
     const { productId, purchaseToken } = request.data;
-    const packageName = 'com.linkvault.app';
+    const packageName = 'com.dolgogae.linkvault';
 
     try {
       const credentials = JSON.parse(serviceAccountKey.value());

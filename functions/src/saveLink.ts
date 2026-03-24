@@ -89,10 +89,10 @@ export const saveLink = onCall<SaveLinkData>(
     const storedPeriod = userData?.monthlyUsage?.period;
 
     if (storedPeriod === currentPeriod) {
-      batch.set(userRef, {
+      batch.update(userRef, {
         linkCount: admin.firestore.FieldValue.increment(1),
         'monthlyUsage.linksSaved': admin.firestore.FieldValue.increment(1),
-      }, { merge: true });
+      });
     } else {
       // 월이 바뀌면 카운터 리셋
       batch.set(userRef, {

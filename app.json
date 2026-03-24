@@ -19,7 +19,7 @@
       "googleServicesFile": "./GoogleService-Info.plist"
     },
     "android": {
-      "package": "com.linkvault.app",
+      "package": "com.dolgogae.linkvault",
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/link-vault-foreground.png",
