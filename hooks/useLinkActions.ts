@@ -30,6 +30,15 @@ export function useLinkActions(userId: string, onRefresh: () => void) {
 
   const handleMoveLink = useCallback(
     async (link: Link, newCategoryPath: string[]) => {
+      const isSamePath =
+        link.categoryPath.length === newCategoryPath.length &&
+        link.categoryPath.every((categoryId, index) => categoryId === newCategoryPath[index]);
+
+      if (isSamePath) {
+        setMovingLink(null);
+        return;
+      }
+
       try {
         await moveLink(userId, link.id, link.categoryPath, newCategoryPath);
         setMovingLink(null);
