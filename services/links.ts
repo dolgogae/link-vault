@@ -22,29 +22,19 @@ export async function analyzeAndSaveLink(url: string): Promise<{
 }> {
   const fns = getFunctions();
 
-  const analyzeResult = await httpsCallable(fns, 'analyzeLink')({ url });
-  const metadata = analyzeResult.data as any;
+  const result = await httpsCallable(fns, 'saveFullLink')({ url });
+  const data = result.data as {
+    linkId: string;
+    categoryPath: string[];
+    categoryIds: string[];
+    tags: string[];
+  };
 
-  const categorizeResult = await httpsCallable(fns, 'categorizeLink')({
-    metadata,
-  });
-  const classification = categorizeResult.data as any;
-
-  const saveResult = await httpsCallable(fns, 'saveLink')({
-    url,
-    title: metadata.title,
-    description: metadata.description,
-    ogImage: metadata.ogImage,
-    favicon: metadata.favicon,
-    domain: metadata.domain,
-    categoryIds: classification.categoryIds,
-    categoryPath: classification.categoryPath,
-    tags: classification.tags,
-    icon: classification.icon,
-  });
-
-  const saveData = saveResult.data as { linkId: string; categoryPath: string[] };
-  return { ...saveData, categoryIds: classification.categoryIds };
+  return {
+    linkId: data.linkId,
+    categoryPath: data.categoryPath,
+    categoryIds: data.categoryIds,
+  };
 }
 
 export function getLinksQuery(

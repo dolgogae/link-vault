@@ -1,8 +1,6 @@
 import { onRequest } from 'firebase-functions/v2/https';
 
-export { analyzeLink } from './analyzeLink';
-export { categorizeLink } from './categorize';
-export { saveLink } from './saveLink';
+export { saveFullLink } from './saveFullLink';
 
 export { cleanupCategories } from './cleanupCategories';
 export { verifyPurchase } from './verifyPurchase';
