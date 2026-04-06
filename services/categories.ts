@@ -99,6 +99,63 @@ export async function createCategory(
   return docRef.id;
 }
 
+export async function ensureCategoryPath(
+  userId: string,
+  rawPath: string,
+): Promise<{ categoryIds: string[]; categoryNames: string[] }> {
+  const segments = rawPath
+    .split('/')
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+
+  if (segments.length === 0) {
+    throw new Error('폴더 경로를 입력해주세요.');
+  }
+
+  let categories = await getAllCategories(userId);
+  let parentId: string | null = null;
+  const categoryIds: string[] = [];
+  const categoryNames: string[] = [];
+
+  for (const [index, segment] of segments.entries()) {
+    let category = categories.find(
+      (item) => item.parentId === parentId && item.name === segment,
+    );
+
+    if (!category) {
+      const depth: number = parentId
+        ? (categories.find((item) => item.id === parentId)?.depth ?? -1) + 1
+        : 0;
+
+      const categoryId = await createCategory(userId, {
+        name: segment,
+        parentId,
+        depth,
+        icon: 'folder',
+      });
+
+      category = {
+        id: categoryId,
+        name: segment,
+        parentId,
+        depth,
+        order: 0,
+        linkCount: 0,
+        icon: 'folder',
+        createdAt: new Date(),
+      };
+
+      categories = [...categories, category];
+    }
+
+    categoryIds.push(category.id);
+    categoryNames.push(category.name);
+    parentId = category.id;
+  }
+
+  return { categoryIds, categoryNames };
+}
+
 export async function renameCategory(
   userId: string,
   categoryId: string,
