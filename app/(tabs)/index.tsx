@@ -232,9 +232,7 @@ export default function HomeScreen() {
   return (
     <View className="flex-1 bg-background dark:bg-background-dark">
       <ScrollView
-        contentContainerStyle={
-          isEmpty && !isLoading ? { flex: 1 } : { paddingBottom: 40 }
-        }
+        contentContainerStyle={{ paddingBottom: 40 }}
         refreshControl={
           <RefreshControl
             refreshing={isLoading && refreshKey > 0}
@@ -301,7 +299,7 @@ export default function HomeScreen() {
           </Pressable>
         )}
 
-        {/* ── 루트: 기존 폴더 그리드 ── */}
+        {/* ── 루트: 폴더 그리드 ── */}
         {isRoot && childCategories.length > 0 && (
           <View className="pt-5">
             <View className="flex-row items-center justify-between px-6 mb-3">
@@ -330,8 +328,8 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* ── 폴더 안: 트리 뷰 (들여쓰기 펼침/접기) ── */}
-        {!isRoot && (
+        {/* ── 폴더 안: 트리 뷰 ── */}
+        {!isRoot && childCategories.length > 0 && (
           <View className="pt-3">
             <View className="flex-row items-center justify-between px-6 mb-2">
               <Text className="text-sm font-semibold text-text-secondary dark:text-text-dark-secondary">
@@ -346,50 +344,46 @@ export default function HomeScreen() {
                 </Text>
               </Pressable>
             </View>
+            <FolderTreeView
+              categories={childCategories}
+              allLinks={allLinks}
+              onCategoryLongPress={handleCategoryLongPress}
+              onLinkPress={handleLinkPress}
+              onLinkLongPress={handleLinkLongPress}
+              onFavoritePress={handleFavoritePress}
+              onDeletePress={handleDeleteLink}
+              onMovePress={(l) => setMovingLink(l)}
+            />
+          </View>
+        )}
 
-            {/* 하위 폴더 트리 */}
+        {/* ── 폴더 안: 직속 링크 ── */}
+        {!isRoot && currentLinks.length > 0 && (
+          <View className="mt-2">
             {childCategories.length > 0 && (
-              <FolderTreeView
-                categories={childCategories}
-                allLinks={allLinks}
-                onCategoryLongPress={handleCategoryLongPress}
-                onLinkPress={handleLinkPress}
-                onLinkLongPress={handleLinkLongPress}
+              <View className="h-px bg-surface dark:bg-surface-dark mx-6 mb-2" />
+            )}
+            {currentLinks.map((link) => (
+              <LinkCard
+                key={link.id}
+                link={link}
+                onPress={handleLinkPress}
                 onFavoritePress={handleFavoritePress}
                 onDeletePress={handleDeleteLink}
                 onMovePress={(l) => setMovingLink(l)}
+                onLongPress={handleLinkLongPress}
+                viewMode="list"
               />
-            )}
-
-            {/* 현재 폴더의 직속 링크 */}
-            {currentLinks.length > 0 && (
-              <View className="mt-2">
-                {childCategories.length > 0 && (
-                  <View className="h-px bg-surface dark:bg-surface-dark mx-6 mb-2" />
-                )}
-                {currentLinks.map((link) => (
-                  <LinkCard
-                    key={link.id}
-                    link={link}
-                    onPress={handleLinkPress}
-                    onFavoritePress={handleFavoritePress}
-                    onDeletePress={handleDeleteLink}
-                    onMovePress={(l) => setMovingLink(l)}
-                    onLongPress={handleLinkLongPress}
-                    viewMode="list"
-                  />
-                ))}
-              </View>
-            )}
-
-            {/* 비어있음 */}
-            {childCategories.length === 0 && currentLinks.length === 0 && !isLoading && (
-              <EmptyState
-                icon="folder-open-o"
-                title="이 폴더가 비어있습니다"
-              />
-            )}
+            ))}
           </View>
+        )}
+
+        {/* ── 빈 폴더 ── */}
+        {!isRoot && isEmpty && !isLoading && (
+          <EmptyState
+            icon="folder-open-o"
+            title="이 폴더가 비어있습니다"
+          />
         )}
 
         {/* ── 루트 비어있음 ── */}

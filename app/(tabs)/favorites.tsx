@@ -43,6 +43,9 @@ export default function FavoritesScreen() {
       <FlatList
         data={favorites}
         keyExtractor={(item) => item.id}
+        contentContainerStyle={
+          !favorites?.length && !loading ? { flexGrow: 1 } : undefined
+        }
         refreshControl={
           <RefreshControl
             refreshing={loading}

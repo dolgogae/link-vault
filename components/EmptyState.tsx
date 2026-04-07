@@ -10,7 +10,7 @@ interface EmptyStateProps {
 
 export function EmptyState({ icon, title, subtitle, action }: EmptyStateProps) {
   return (
-    <View className="items-center pt-20">
+    <View className="items-center pt-16">
       <FontAwesome name={icon} size={48} color="#9CA3AF" />
       <Text className="text-base text-text-secondary dark:text-text-dark-secondary mt-4">
         {title}
