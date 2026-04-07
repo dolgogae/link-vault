@@ -38,6 +38,12 @@ interface CachedCategory {
   createdAt: FirebaseFirestore.FieldValue;
 }
 
+interface ClassificationContext {
+  keywordHints: string[];
+  urlPathHints: string[];
+  richnessScore: number;
+}
+
 // ─── Metadata Extraction Helpers ─────────────────────────────────────────────
 
 interface InstagramHints {
@@ -287,6 +293,36 @@ const BLOCKED_ROOT_NAMES = [
   '기타', '일반', '잡동사니', '기록', '링크', '읽을거리', '자료',
 ];
 
+const GENERIC_CATEGORY_NAMES = new Set([
+  ...BLOCKED_ROOT_NAMES,
+  '튜토리얼',
+  '가이드',
+  '문서',
+  '게시물',
+  '포스트',
+  '영상',
+  '동영상',
+  '비디오',
+  '채널',
+  '계정',
+  '웹사이트',
+  '사이트',
+  '페이지',
+  '뉴스',
+  '기사',
+  '정보',
+  '팁',
+]);
+
+const STOPWORDS = new Set([
+  'www', 'http', 'https', 'com', 'co', 'kr', 'net', 'org', 'www2', 'm',
+  'amp', 'utm', 'source', 'ref', 'page', 'pages', 'post', 'posts', 'watch',
+  'video', 'videos', 'index', 'home', 'category', 'categories', 'tag', 'tags',
+  'share', 'reel', 'reels', 'p', 'tv', 'shorts', 'clip', 'clips',
+]);
+
+const CLASSIFICATION_MODELS = ['gpt-5-mini', 'gpt-5-nano'] as const;
+
 function sanitizeCategoryName(name: string): string {
   return name
     .replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/gu, '')
@@ -295,12 +331,113 @@ function sanitizeCategoryName(name: string): string {
     .trim();
 }
 
-function buildSystemPrompt(categoryTree: string): string {
-  return `당신은 웹 링크를 분석하여 카테고리로 분류하는 전문가입니다.
+function sanitizeTag(tag: string): string {
+  return tag
+    .replace(/[#/\\]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
 
-## 핵심 원칙: 콘텐츠 주제 중심 분류
-반드시 콘텐츠의 실제 주제/분야를 기준으로 분류하세요.
-플랫폼이나 매체 이름(유튜브, 인스타그램, 트위터, 틱톡 등)을 카테고리로 사용하지 마세요.
+function extractKeywordHints(url: string, metadata: LinkMetadata): ClassificationContext {
+  const parsed = new URL(url);
+  const sources = [
+    metadata.title,
+    metadata.description,
+    metadata.bodyText,
+    decodeURIComponent(parsed.pathname),
+    decodeURIComponent(parsed.search.replace(/[?&=_-]/g, ' ')),
+    parsed.hostname.replace(/\./g, ' '),
+  ].filter(Boolean);
+
+  const tokens = sources
+    .join(' ')
+    .split(/[^0-9A-Za-z가-힣+#]+/)
+    .map((token) => token.trim())
+    .filter(Boolean);
+
+  const scored = new Map<string, number>();
+
+  for (const token of tokens) {
+    const normalized = token.toLowerCase();
+    if (
+      normalized.length < 2 ||
+      STOPWORDS.has(normalized) ||
+      /^\d+$/.test(normalized) ||
+      /^[_-]+$/.test(normalized)
+    ) {
+      continue;
+    }
+
+    const current = scored.get(token) || 0;
+    let weight = 1;
+
+    if (token.startsWith('#')) weight += 3;
+    if (/[가-힣]/.test(token)) weight += 1;
+    if (/[A-Z]/.test(token)) weight += 1;
+    if (metadata.title.includes(token)) weight += 3;
+    if (metadata.description.includes(token)) weight += 2;
+    if (metadata.bodyText.includes(token)) weight += 1;
+    if (parsed.pathname.includes(token)) weight += 2;
+
+    scored.set(token, current + weight);
+  }
+
+  const keywordHints = [...scored.entries()]
+    .sort((a, b) => b[1] - a[1] || b[0].length - a[0].length)
+    .slice(0, 12)
+    .map(([token]) => token);
+
+  const urlPathHints = decodeURIComponent(parsed.pathname)
+    .split('/')
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .filter((part) => {
+      const normalized = part.toLowerCase();
+      return (
+        normalized.length >= 2 &&
+        !STOPWORDS.has(normalized) &&
+        !/^\d+$/.test(normalized)
+      );
+    })
+    .slice(0, 8);
+
+  let richnessScore = 0;
+  if (metadata.title.trim().length >= 12) richnessScore += 2;
+  if (metadata.description.trim().length >= 20) richnessScore += 2;
+  if (metadata.bodyText.trim().length >= 80) richnessScore += 2;
+  if (keywordHints.length >= 5) richnessScore += 1;
+  if (urlPathHints.length >= 2) richnessScore += 1;
+
+  return {
+    keywordHints,
+    urlPathHints,
+    richnessScore,
+  };
+}
+
+function isGenericCategoryName(name: string): boolean {
+  const normalized = sanitizeCategoryName(name).toLowerCase();
+  return GENERIC_CATEGORY_NAMES.has(normalized) || normalized.length < 2;
+}
+
+function isCategoryPathTooGeneric(path: string[], richnessScore: number): boolean {
+  if (path.length === 0) return true;
+  if (path.some((name) => isGenericCategoryName(name))) return true;
+  if (richnessScore >= 4 && path.length < 2) return true;
+  if (richnessScore >= 6 && path.length < 3) return true;
+  return false;
+}
+
+function buildSystemPrompt(categoryTree: string): string {
+  return `당신은 웹 링크의 **내용물 주제**만으로 분류하는 전문가입니다.
+
+## 절대 규칙 (위반 시 실패)
+- 링크가 어떤 플랫폼(유튜브, 인스타, 틱톡, 트위터 등)에서 왔는지는 **완전히 무시**하세요. 플랫폼은 분류와 무관합니다.
+- 다음 단어는 categoryPath에 **절대 포함 금지**: "콘텐츠", "미디어", "소셜 미디어", "SNS", "온라인", "동영상", "영상", "게시물", "채널", "플랫폼"
+- 오직 "이 링크가 무엇에 관한 것인가?"에만 답하세요.
+
+## 핵심 원칙: 내용물 주제 중심 분류
+유튜브 영상이든 인스타 게시물이든 블로그든 상관없이, 그 안의 실제 주제/분야로만 분류하세요.
 너무 넓은 한 단어 분류보다, 사용자가 나중에 다시 찾기 쉬운 구체적인 주제 분류를 우선하세요.
 
 ### 올바른 분류 예시
@@ -338,12 +475,19 @@ function buildSystemPrompt(categoryTree: string): string {
 - 1단계는 큰 분야, 2단계는 세부 주제, 3단계는 기술/형식/용도까지 반영하세요.
 - 가능하면 2~3단계로 구체화하세요. 정말 정보가 부족할 때만 1단계로 끝내세요.
 - "개발", "금융", "건강", "여행", "라이프스타일" 같은 대분류만으로 끝내지 말고, 가능한 하위 주제를 추가하세요.
+- 제목, 설명, 본문, URL 경로, 해시태그, 작성자명에서 주제를 추론해 더 구체화하세요.
 - 예:
   - 개발 일반 글보다는 ["개발", "백엔드", "데이터베이스"]
   - 금융 일반 글보다는 ["금융", "투자", "ETF"]
   - 건강 일반 글보다는 ["건강", "운동", "러닝"]
   - 여행 일반 글보다는 ["여행", "일본", "오사카"]
   - 라이프스타일 일반 글보다는 ["라이프스타일", "요리", "레시피"]
+
+### 출력 전 점검 체크리스트
+- 이 경로만 봐도 사용자가 나중에 무엇에 관한 링크인지 감이 오는가?
+- 2단계 이름이 "튜토리얼", "기사", "영상", "게시물"처럼 형식만 말하고 있지 않은가?
+- URL 경로나 키워드에 드러난 기술명, 지역명, 제품명, 음식명, 운동명 등을 반영했는가?
+- 정보가 충분한데 1단계나 2단계에서 멈추고 있지 않은가?
 
 ## 규칙
 1. 기존 카테고리 트리를 참고하여 가장 적합한 카테고리에 배치하세요.
@@ -367,15 +511,52 @@ ${categoryTree || '(아직 카테고리가 없습니다. 새로 생성하세요.
 }`;
 }
 
-function buildUserPrompt(metadata: LinkMetadata): string {
-  return `다음 링크를 콘텐츠 주제 기준으로 분류해주세요. 플랫폼 이름이 아닌 실제 다루는 주제로 분류하세요.
-반드시 너무 넓은 분류를 피하고, 사용자가 다시 찾기 좋은 수준까지 세분화하세요.
-카테고리명에는 "/"를 넣지 마세요.
+const SOCIAL_DOMAINS = new Set([
+  'youtube.com', 'youtu.be', 'm.youtube.com',
+  'instagram.com', 'www.instagram.com',
+  'twitter.com', 'x.com', 'mobile.twitter.com',
+  'tiktok.com', 'www.tiktok.com',
+  'facebook.com', 'www.facebook.com', 'm.facebook.com',
+  'threads.net', 'www.threads.net',
+  'reddit.com', 'www.reddit.com', 'old.reddit.com',
+]);
+
+function buildUserPrompt(metadata: LinkMetadata, context: ClassificationContext): string {
+  const isSocial = SOCIAL_DOMAINS.has(metadata.domain);
+
+  return `이 링크의 내용물이 무엇에 관한 것인지만 판단하여 분류하세요.
+플랫폼/매체는 무시하고 주제만 보세요. "/"를 카테고리명에 넣지 마세요.
+정보가 충분하면 2~3단계로 구체화하세요.
+
+제목: ${metadata.title}
+설명: ${metadata.description}${isSocial ? '' : `\n도메인: ${metadata.domain}`}
+본문 발췌: ${metadata.bodyText.slice(0, 500)}
+URL 경로 힌트: ${context.urlPathHints.join(', ') || '(없음)'}
+추정 키워드: ${context.keywordHints.join(', ') || '(없음)'}`;
+}
+
+function buildRefinementPrompt(
+  metadata: LinkMetadata,
+  context: ClassificationContext,
+  initialResult: ClassificationResult,
+): string {
+  return `이전 분류 결과가 충분히 구체적인지 다시 검토해주세요.
+
+이전 결과:
+${JSON.stringify(initialResult, null, 2)}
+
+요구사항:
+- 더 구체화할 수 있으면 반드시 더 구체적인 경로로 수정하세요.
+- 형식 중심 이름("튜토리얼", "기사", "영상", "게시물") 대신 주제 중심 이름으로 바꾸세요.
+- 정보가 충분한데 1단계 또는 2단계에서 끝난 경우 보강하세요.
+- 수정할 필요가 없다면 그대로 유지해도 되지만, 왜 충분히 구체적인지 스스로 검토한 뒤 JSON만 출력하세요.
 
 제목: ${metadata.title}
 설명: ${metadata.description}
 도메인: ${metadata.domain}
-본문 발췌: ${metadata.bodyText.slice(0, 500)}`;
+본문 발췌: ${metadata.bodyText.slice(0, 500)}
+URL 경로 힌트: ${context.urlPathHints.join(', ') || '(없음)'}
+추정 키워드: ${context.keywordHints.join(', ') || '(없음)'}`;
 }
 
 function buildCategoryTree(categories: any[]): CategoryTree[] {
@@ -491,7 +672,7 @@ async function ensureCategoryPath(
 
 export const saveFullLink = onCall<{ url: string }>(
   {
-    timeoutSeconds: 30,
+    timeoutSeconds: 120,
     memory: '256MiB',
     secrets: [openaiApiKey],
   },
@@ -589,6 +770,8 @@ export const saveFullLink = onCall<{ url: string }>(
       }
     }
 
+    const classificationContext = extractKeywordHints(url, metadata);
+
     // ── Phase 2: Parallel DB lookups ──────────────────────────────────────
     // Cache check + duplicate check + user doc read all run simultaneously
     const metadataHash = generateMetadataHash(metadata);
@@ -635,10 +818,21 @@ export const saveFullLink = onCall<{ url: string }>(
           categoryPath: cached.categoryPath
             .map((name) => sanitizeCategoryName(name))
             .filter(Boolean),
+          tags: (cached.tags || [])
+            .map((tag) => sanitizeTag(tag))
+            .filter(Boolean),
         }
       : null;
 
-    if (sanitizedCache && sanitizedCache.categoryPath.length > 0 && !BLOCKED_ROOT_NAMES.includes(sanitizedCache.categoryPath[0])) {
+    if (
+      sanitizedCache &&
+      sanitizedCache.categoryPath.length > 0 &&
+      !BLOCKED_ROOT_NAMES.includes(sanitizedCache.categoryPath[0]) &&
+      !isCategoryPathTooGeneric(
+        sanitizedCache.categoryPath,
+        classificationContext.richnessScore,
+      )
+    ) {
       logger.info('Cache hit', { hash: metadataHash, categoryPath: sanitizedCache.categoryPath });
       categoryPath = sanitizedCache.categoryPath;
       tags = sanitizedCache.tags;
@@ -662,7 +856,7 @@ export const saveFullLink = onCall<{ url: string }>(
       const categoryTree = buildCategoryTree(categories);
       const treeString = formatCategoryTree(categoryTree);
 
-      const openai = new OpenAI({ apiKey: openaiApiKey.value() });
+      const openai = new OpenAI({ apiKey: openaiApiKey.value(), timeout: 30_000 });
 
       let retries = 0;
       const maxRetries = 2;
@@ -670,18 +864,20 @@ export const saveFullLink = onCall<{ url: string }>(
 
       while (true) {
         try {
+          const model = CLASSIFICATION_MODELS[Math.min(retries, CLASSIFICATION_MODELS.length - 1)];
           const completion = await openai.chat.completions.create({
-            model: 'gpt-5-nano',
+            model,
             messages: [
               { role: 'system', content: buildSystemPrompt(treeString) },
-              { role: 'user', content: buildUserPrompt(metadata) },
+              { role: 'user', content: buildUserPrompt(metadata, classificationContext) },
             ],
             response_format: { type: 'json_object' },
             reasoning_effort: 'low',
-            max_completion_tokens: 512,
+            max_completion_tokens: 2048,
           });
 
           logger.info('OpenAI response', {
+            model,
             finishReason: completion.choices[0]?.finish_reason,
             content: completion.choices[0]?.message?.content,
             usage: completion.usage,
@@ -694,9 +890,13 @@ export const saveFullLink = onCall<{ url: string }>(
 
           result = JSON.parse(content) as ClassificationResult;
 
-          result.categoryPath = result.categoryPath
+          result.categoryPath = (result.categoryPath || [])
             .map((name) => sanitizeCategoryName(name))
             .filter(Boolean);
+          result.tags = (result.tags || [])
+            .map((tag) => sanitizeTag(tag))
+            .filter(Boolean)
+            .slice(0, 8);
 
           const maxDepth = plan === 'premium' ? 4 : 2;
           if (result.categoryPath.length > maxDepth) {
@@ -705,6 +905,58 @@ export const saveFullLink = onCall<{ url: string }>(
 
           if (result.categoryPath.length === 0) {
             throw new Error('AI가 유효한 카테고리 경로를 반환하지 않았습니다.');
+          }
+
+          if (
+            isCategoryPathTooGeneric(
+              result.categoryPath,
+              classificationContext.richnessScore,
+            )
+          ) {
+            const refinementModel = CLASSIFICATION_MODELS[Math.min(retries, CLASSIFICATION_MODELS.length - 1)];
+            const refinement = await openai.chat.completions.create({
+              model: refinementModel,
+              messages: [
+                { role: 'system', content: buildSystemPrompt(treeString) },
+                {
+                  role: 'user',
+                  content: buildRefinementPrompt(
+                    metadata,
+                    classificationContext,
+                    result,
+                  ),
+                },
+              ],
+              response_format: { type: 'json_object' },
+              reasoning_effort: 'medium',
+              max_completion_tokens: 2048,
+            });
+
+            logger.info('OpenAI refinement response', {
+              model: refinementModel,
+              finishReason: refinement.choices[0]?.finish_reason,
+              content: refinement.choices[0]?.message?.content,
+              usage: refinement.usage,
+            });
+
+            const refinementContent = refinement.choices[0]?.message?.content;
+            if (!refinementContent) {
+              throw new Error('AI 재분류 응답이 비어있습니다.');
+            }
+
+            const refinedResult = JSON.parse(refinementContent) as ClassificationResult;
+            refinedResult.categoryPath = (refinedResult.categoryPath || [])
+              .map((name) => sanitizeCategoryName(name))
+              .filter(Boolean)
+              .slice(0, maxDepth);
+            refinedResult.tags = (refinedResult.tags || [])
+              .map((tag) => sanitizeTag(tag))
+              .filter(Boolean)
+              .slice(0, 8);
+
+            if (refinedResult.categoryPath.length > 0) {
+              result = refinedResult;
+            }
           }
 
           break;
@@ -720,12 +972,24 @@ export const saveFullLink = onCall<{ url: string }>(
         }
       }
 
-      // Save to cache (fire-and-forget, don't await)
-      db.collection('categoryCache').doc(metadataHash).set({
-        categoryPath: result.categoryPath,
-        tags: result.tags,
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      }).catch((err) => logger.warn('Cache save failed', { error: err.message }));
+      if (
+        !isCategoryPathTooGeneric(
+          result.categoryPath,
+          classificationContext.richnessScore,
+        )
+      ) {
+        db.collection('categoryCache').doc(metadataHash).set({
+          categoryPath: result.categoryPath,
+          tags: result.tags,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        }).catch((err) => logger.warn('Cache save failed', { error: err.message }));
+      } else {
+        logger.warn('Skip cache save for generic category path', {
+          hash: metadataHash,
+          categoryPath: result.categoryPath,
+          richnessScore: classificationContext.richnessScore,
+        });
+      }
 
       categoryPath = result.categoryPath;
       tags = result.tags;
