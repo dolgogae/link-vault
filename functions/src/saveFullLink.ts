@@ -205,7 +205,15 @@ async function fetchAndParseHtml(
     });
 
     if (!response.ok) {
-      throw new HttpsError('unavailable', `URL 접근 실패: HTTP ${response.status}`);
+      logger.warn('HTTP fetch failed, using fallback metadata', { url, status: response.status });
+      return {
+        title: parsedUrl.hostname + decodeURIComponent(parsedUrl.pathname),
+        description: '',
+        ogImage: '',
+        favicon: `${parsedUrl.protocol}//${parsedUrl.host}/favicon.ico`,
+        domain: parsedUrl.hostname,
+        bodyText: `URL: ${url}`,
+      };
     }
 
     const html = await response.text();
@@ -274,7 +282,18 @@ function generateMetadataHash(metadata: LinkMetadata): string {
   return crypto.createHash('sha256').update(key).digest('hex');
 }
 
-const BLOCKED_ROOT_NAMES = ['콘텐츠', '미디어', '소셜 미디어', 'SNS', '온라인'];
+const BLOCKED_ROOT_NAMES = [
+  '콘텐츠', '미디어', '소셜 미디어', 'SNS', '온라인',
+  '기타', '일반', '잡동사니', '기록', '링크', '읽을거리', '자료',
+];
+
+function sanitizeCategoryName(name: string): string {
+  return name
+    .replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/gu, '')
+    .replace(/[\\/]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
 
 function buildSystemPrompt(categoryTree: string): string {
   return `당신은 웹 링크를 분석하여 카테고리로 분류하는 전문가입니다.
@@ -282,6 +301,7 @@ function buildSystemPrompt(categoryTree: string): string {
 ## 핵심 원칙: 콘텐츠 주제 중심 분류
 반드시 콘텐츠의 실제 주제/분야를 기준으로 분류하세요.
 플랫폼이나 매체 이름(유튜브, 인스타그램, 트위터, 틱톡 등)을 카테고리로 사용하지 마세요.
+너무 넓은 한 단어 분류보다, 사용자가 나중에 다시 찾기 쉬운 구체적인 주제 분류를 우선하세요.
 
 ### 올바른 분류 예시
 - 패션 인스타그램 게시물 → ["라이프스타일", "패션"]
@@ -289,12 +309,20 @@ function buildSystemPrompt(categoryTree: string): string {
 - 프로그래밍 강의 유튜브 → ["개발", "프로그래밍 강의"]
 - 운동 틱톡 영상 → ["건강", "운동"]
 - 음악 관련 트윗 → ["엔터테인먼트", "음악"]
+- React 상태관리 글 → ["개발", "프론트엔드", "리액트"]
+- Next.js 배포 튜토리얼 → ["개발", "프론트엔드", "넥스트JS"]
+- 부동산 세금 해설 기사 → ["금융", "부동산", "세금"]
+- 생산성 앱 비교 리뷰 → ["생산성", "도구", "앱 비교"]
+- 일본 오사카 여행 코스 → ["여행", "일본", "오사카"]
 
 ### 잘못된 분류 예시 (절대 금지)
 - ❌ ["콘텐츠", "소셜 미디어", "인스타그램"]
 - ❌ ["콘텐츠", "미디어"] — "콘텐츠"나 "미디어"는 너무 포괄적이라 최상위 카테고리로 절대 사용 금지
 - ❌ ["미디어", "동영상", "유튜브"]
 - ❌ ["SNS", "트위터"]
+- ❌ ["개발", "튜토리얼"] — 무엇에 대한 튜토리얼인지 빠져 있음
+- ❌ ["뉴스", "기사"] — 주제 정보가 없음
+- ❌ ["콘텐츠/미디어"] — 슬래시가 들어간 폴더명은 절대 금지
 - ❌ 최상위 카테고리가 "콘텐츠", "미디어", "소셜 미디어", "SNS", "온라인" 등 모호한 이름인 경우
 
 ### 소셜 미디어 링크 분류 핵심 원칙
@@ -306,13 +334,27 @@ function buildSystemPrompt(categoryTree: string): string {
 - 밈/유머 → ["엔터테인먼트", "유머"]
 - 뉴스/시사 → ["뉴스", "시사"]
 
+### 더 세분화하는 기준
+- 1단계는 큰 분야, 2단계는 세부 주제, 3단계는 기술/형식/용도까지 반영하세요.
+- 가능하면 2~3단계로 구체화하세요. 정말 정보가 부족할 때만 1단계로 끝내세요.
+- "개발", "금융", "건강", "여행", "라이프스타일" 같은 대분류만으로 끝내지 말고, 가능한 하위 주제를 추가하세요.
+- 예:
+  - 개발 일반 글보다는 ["개발", "백엔드", "데이터베이스"]
+  - 금융 일반 글보다는 ["금융", "투자", "ETF"]
+  - 건강 일반 글보다는 ["건강", "운동", "러닝"]
+  - 여행 일반 글보다는 ["여행", "일본", "오사카"]
+  - 라이프스타일 일반 글보다는 ["라이프스타일", "요리", "레시피"]
+
 ## 규칙
 1. 기존 카테고리 트리를 참고하여 가장 적합한 카테고리에 배치하세요.
 2. 적합한 기존 카테고리가 없으면 새 카테고리를 생성하세요.
 3. 카테고리 경로는 최대 4단계까지 허용됩니다.
-4. 카테고리 이름은 순수한 한국어 텍스트만 사용하세요. 이모지, 아이콘, 특수 기호를 절대 포함하지 마세요.
+4. 카테고리 이름은 순수한 한국어 텍스트를 우선 사용하세요. 이모지, 아이콘, 특수 기호를 절대 포함하지 마세요.
 5. 기존 카테고리 이름과 동일한 분류가 있으면 반드시 기존 이름을 그대로 재사용하세요.
 6. 제목이나 설명에서 실제 주제를 파악하기 어려우면, URL 경로나 작성자 정보를 단서로 최대한 구체적인 주제를 추론하세요.
+7. 카테고리 이름에 "/" 또는 "\\"를 절대 넣지 마세요. "콘텐츠/미디어"처럼 두 개념을 합친 이름도 금지입니다.
+8. "기타", "일반", "잡동사니", "기록", "링크", "읽을거리", "자료", "콘텐츠", "미디어"처럼 회수용 바구니 같은 모호한 이름은 마지막 수단으로도 사용하지 마세요.
+9. 출력 전 각 카테고리명이 충분히 구체적인지 다시 점검하세요. 더 구체화할 수 있으면 더 구체화하세요.
 
 ## 기존 카테고리 트리
 ${categoryTree || '(아직 카테고리가 없습니다. 새로 생성하세요.)'}
@@ -327,6 +369,8 @@ ${categoryTree || '(아직 카테고리가 없습니다. 새로 생성하세요.
 
 function buildUserPrompt(metadata: LinkMetadata): string {
   return `다음 링크를 콘텐츠 주제 기준으로 분류해주세요. 플랫폼 이름이 아닌 실제 다루는 주제로 분류하세요.
+반드시 너무 넓은 분류를 피하고, 사용자가 다시 찾기 좋은 수준까지 세분화하세요.
+카테고리명에는 "/"를 넣지 마세요.
 
 제목: ${metadata.title}
 설명: ${metadata.description}
@@ -585,10 +629,19 @@ export const saveFullLink = onCall<{ url: string }>(
       ? (cachedCategory.data() as CachedCategory)
       : null;
 
-    if (cached && !BLOCKED_ROOT_NAMES.includes(cached.categoryPath[0])) {
-      logger.info('Cache hit', { hash: metadataHash, categoryPath: cached.categoryPath });
-      categoryPath = cached.categoryPath;
-      tags = cached.tags;
+    const sanitizedCache = cached
+      ? {
+          ...cached,
+          categoryPath: cached.categoryPath
+            .map((name) => sanitizeCategoryName(name))
+            .filter(Boolean),
+        }
+      : null;
+
+    if (sanitizedCache && sanitizedCache.categoryPath.length > 0 && !BLOCKED_ROOT_NAMES.includes(sanitizedCache.categoryPath[0])) {
+      logger.info('Cache hit', { hash: metadataHash, categoryPath: sanitizedCache.categoryPath });
+      categoryPath = sanitizedCache.categoryPath;
+      tags = sanitizedCache.tags;
     } else {
       logger.info('Cache miss', { hash: metadataHash });
 
@@ -625,7 +678,7 @@ export const saveFullLink = onCall<{ url: string }>(
             ],
             response_format: { type: 'json_object' },
             reasoning_effort: 'low',
-            max_completion_tokens: 2048,
+            max_completion_tokens: 512,
           });
 
           logger.info('OpenAI response', {
@@ -641,13 +694,17 @@ export const saveFullLink = onCall<{ url: string }>(
 
           result = JSON.parse(content) as ClassificationResult;
 
-          result.categoryPath = result.categoryPath.map((name) =>
-            name.replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/gu, '').trim(),
-          );
+          result.categoryPath = result.categoryPath
+            .map((name) => sanitizeCategoryName(name))
+            .filter(Boolean);
 
           const maxDepth = plan === 'premium' ? 4 : 2;
           if (result.categoryPath.length > maxDepth) {
             result.categoryPath = result.categoryPath.slice(0, maxDepth);
+          }
+
+          if (result.categoryPath.length === 0) {
+            throw new Error('AI가 유효한 카테고리 경로를 반환하지 않았습니다.');
           }
 
           break;
