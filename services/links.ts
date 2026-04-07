@@ -22,7 +22,7 @@ export async function analyzeAndSaveLink(url: string): Promise<{
 }> {
   const fns = getFunctions();
 
-  const result = await httpsCallable(fns, 'saveFullLink')({ url });
+  const result = await httpsCallable(fns, 'saveFullLink', { timeout: 120_000 })({ url });
   const data = result.data as {
     linkId: string;
     categoryPath: string[];
