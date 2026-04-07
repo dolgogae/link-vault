@@ -59,11 +59,19 @@ export function useLinkActions(userId: string, onRefresh: () => void) {
         {
           text: '삭제',
           style: 'destructive',
-          onPress: () => handleDeleteLink(link),
+          onPress: async () => {
+            try {
+              await deleteLink(userId, link.id, link.categoryPath);
+              onRefresh();
+            } catch (e) {
+              console.error('[useLinkActions] delete failed:', e);
+              Alert.alert('오류', '링크 삭제에 실패했습니다.');
+            }
+          },
         },
       ]);
     },
-    [handleDeleteLink],
+    [userId, onRefresh],
   );
 
   return {
