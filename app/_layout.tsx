@@ -2,7 +2,7 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useFonts } from 'expo-font';
-import { Stack, router } from 'expo-router';
+import { Stack, Redirect } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import 'react-native-reanimated';
@@ -121,17 +121,6 @@ function RootLayoutNav() {
     return unsubscribe;
   }, [user?.uid]);
 
-  // 인증 상태에 따른 리다이렉트
-  useEffect(() => {
-    if (isLoading) return;
-
-    if (!user) {
-      router.replace('/(auth)/onboarding');
-    } else {
-      router.replace('/(tabs)');
-    }
-  }, [user, isLoading]);
-
   const navigationTheme =
     colorScheme === 'dark'
       ? {
@@ -164,6 +153,7 @@ function RootLayoutNav() {
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="(auth)" options={{ headerShown: false }} />
         </Stack>
+        {!isLoading && !user && <Redirect href="/(auth)/onboarding" />}
         <SaveProgressToast />
       </ThemeProvider>
     </GestureHandlerRootView>
