@@ -21,6 +21,26 @@ interface AddLinkModalProps {
   onSaved?: (categoryPath: string[], categoryIds: string[]) => void;
 }
 
+function normalizeSaveError(error: unknown) {
+  if (error && typeof error === 'object') {
+    const code =
+      'code' in error && typeof error.code === 'string' ? error.code : 'unknown';
+    const message =
+      'message' in error && typeof error.message === 'string'
+        ? error.message
+        : '링크 저장에 실패했습니다.';
+    const details = 'details' in error ? error.details : null;
+
+    return { code, message, details };
+  }
+
+  return {
+    code: 'unknown',
+    message: typeof error === 'string' ? error : '링크 저장에 실패했습니다.',
+    details: null,
+  };
+}
+
 export function AddLinkModal({ visible, onClose, onSaved }: AddLinkModalProps) {
   const [url, setUrl] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -72,13 +92,24 @@ export function AddLinkModal({ visible, onClose, onSaved }: AddLinkModalProps) {
           },
         ],
       );
-    } catch (error: any) {
+    } catch (error) {
+      const normalized = normalizeSaveError(error);
       const message =
-        error.code === 'already-exists'
+        normalized.code === 'already-exists'
           ? '이미 저장된 링크입니다.'
-          : error.message || '링크 저장에 실패했습니다.';
-      Alert.alert('오류', `[${error.code}] ${message}\n\n${error.details || ''}`);
-      console.error('링크 저장 에러:', error.code, error.message, error.details);
+          : normalized.message;
+      const detailsText =
+        normalized.details == null
+          ? ''
+          : typeof normalized.details === 'string'
+            ? normalized.details
+            : JSON.stringify(normalized.details, null, 2);
+
+      Alert.alert(
+        '오류',
+        `[${normalized.code}] ${message}${detailsText ? `\n\n${detailsText}` : ''}`,
+      );
+      console.error('링크 저장 에러:', normalized);
     } finally {
       setIsAnalyzing(false);
     }
