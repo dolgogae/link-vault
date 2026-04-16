@@ -58,3 +58,5 @@ functions/lib/
 
 # Misc
 *.log
+CLAUDE.md
+credentials.json

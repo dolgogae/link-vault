@@ -8,6 +8,7 @@ import { useLinkActions } from '@/hooks/useLinkActions';
 import { getFavoriteLinksQuery, toggleFavorite } from '@/services/links';
 import { LinkCard } from '@/components/LinkCard';
 import { EmptyState } from '@/components/EmptyState';
+import { LinkActionSheet } from '@/components/LinkActionSheet';
 import { MoveLinkModal } from '@/components/MoveLinkModal';
 import { Link } from '@/types';
 
@@ -23,9 +24,12 @@ export default function FavoritesScreen() {
 
   const {
     movingLink,
+    selectedLink,
     setMovingLink,
     handleDeleteLink,
     handleMoveLink,
+    handleRenameLink,
+    setSelectedLink,
     handleLinkLongPress,
   } = useLinkActions(userId, () => setRefreshKey((k) => k + 1));
 
@@ -76,6 +80,15 @@ export default function FavoritesScreen() {
         link={movingLink}
         onMove={handleMoveLink}
         onClose={() => setMovingLink(null)}
+      />
+
+      <LinkActionSheet
+        visible={!!selectedLink}
+        link={selectedLink}
+        onClose={() => setSelectedLink(null)}
+        onRename={handleRenameLink}
+        onMove={(link) => setMovingLink(link)}
+        onDelete={handleDeleteLink}
       />
     </View>
   );

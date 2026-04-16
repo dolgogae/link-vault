@@ -7,6 +7,7 @@ import { useLinkActions } from '@/hooks/useLinkActions';
 import { SearchBar } from '@/components/SearchBar';
 import { LinkCard } from '@/components/LinkCard';
 import { EmptyState } from '@/components/EmptyState';
+import { LinkActionSheet } from '@/components/LinkActionSheet';
 import { MoveLinkModal } from '@/components/MoveLinkModal';
 import { searchLinks, toggleFavorite } from '@/services/links';
 import { Link } from '@/types';
@@ -31,9 +32,12 @@ export default function SearchScreen() {
 
   const {
     movingLink,
+    selectedLink,
     setMovingLink,
     handleDeleteLink,
     handleMoveLink,
+    handleRenameLink,
+    setSelectedLink,
     handleLinkLongPress,
   } = useLinkActions(userId, refreshResults);
 
@@ -122,6 +126,15 @@ export default function SearchScreen() {
         link={movingLink}
         onMove={handleMoveLink}
         onClose={() => setMovingLink(null)}
+      />
+
+      <LinkActionSheet
+        visible={!!selectedLink}
+        link={selectedLink}
+        onClose={() => setSelectedLink(null)}
+        onRename={handleRenameLink}
+        onMove={(link) => setMovingLink(link)}
+        onDelete={handleDeleteLink}
       />
     </View>
   );

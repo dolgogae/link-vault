@@ -71,6 +71,10 @@ export async function toggleFavorite(userId: string, linkId: string, isFavorite:
   await updateDoc(doc(getLinksRef(userId), linkId), { isFavorite: !isFavorite });
 }
 
+export async function renameLink(userId: string, linkId: string, title: string) {
+  await updateDoc(doc(getLinksRef(userId), linkId), { title });
+}
+
 export async function deleteLink(userId: string, linkId: string, categoryPath: string[]) {
   const db = getFirestore();
   const batch = writeBatch(db);

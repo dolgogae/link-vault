@@ -13,6 +13,7 @@ import { LinkCard } from '@/components/LinkCard';
 import { AddLinkModal } from '@/components/AddLinkModal';
 import { MoveLinkModal } from '@/components/MoveLinkModal';
 import { RenameToast } from '@/components/RenameToast';
+import { LinkActionSheet } from '@/components/LinkActionSheet';
 import { AdBanner } from '@/components/AdBanner';
 import { EmptyState } from '@/components/EmptyState';
 import { FolderTreeView } from '@/components/FolderTreeView';
@@ -38,9 +39,12 @@ export default function HomeScreen() {
 
   const {
     movingLink,
+    selectedLink,
     setMovingLink,
     handleDeleteLink,
     handleMoveLink,
+    handleRenameLink,
+    setSelectedLink,
     handleLinkLongPress,
   } = useLinkActions(userId, () => setRefreshKey((k) => k + 1));
 
@@ -436,6 +440,15 @@ export default function HomeScreen() {
         link={movingLink}
         onMove={handleMoveLink}
         onClose={() => setMovingLink(null)}
+      />
+
+      <LinkActionSheet
+        visible={!!selectedLink}
+        link={selectedLink}
+        onClose={() => setSelectedLink(null)}
+        onRename={handleRenameLink}
+        onMove={(link) => setMovingLink(link)}
+        onDelete={handleDeleteLink}
       />
 
       <RenameToast

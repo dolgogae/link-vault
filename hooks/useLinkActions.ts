@@ -1,10 +1,11 @@
 import { useState, useCallback } from 'react';
 import { Alert } from 'react-native';
-import { deleteLink, moveLink } from '@/services/links';
+import { deleteLink, moveLink, renameLink } from '@/services/links';
 import { Link } from '@/types';
 
 export function useLinkActions(userId: string, onRefresh: () => void) {
   const [movingLink, setMovingLink] = useState<Link | null>(null);
+  const [selectedLink, setSelectedLink] = useState<Link | null>(null);
 
   const handleDeleteLink = useCallback(
     (link: Link) => {
@@ -51,34 +52,35 @@ export function useLinkActions(userId: string, onRefresh: () => void) {
     [userId, onRefresh],
   );
 
-  const handleLinkLongPress = useCallback(
-    (link: Link) => {
-      Alert.alert('링크 작업', `"${link.title}"에 대해 작업을 선택하세요.`, [
-        { text: '취소', style: 'cancel' },
-        { text: '이동', onPress: () => setMovingLink(link) },
-        {
-          text: '삭제',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await deleteLink(userId, link.id, link.categoryPath);
-              onRefresh();
-            } catch (e) {
-              console.error('[useLinkActions] delete failed:', e);
-              Alert.alert('오류', '링크 삭제에 실패했습니다.');
-            }
-          },
-        },
-      ]);
+  const handleRenameLink = useCallback(
+    async (link: Link, newTitle: string) => {
+      try {
+        await renameLink(userId, link.id, newTitle);
+        setSelectedLink(null);
+        onRefresh();
+      } catch (e) {
+        console.error('[useLinkActions] rename failed:', e);
+        Alert.alert('오류', '링크 이름 수정에 실패했습니다.');
+      }
     },
     [userId, onRefresh],
   );
 
+  const handleLinkLongPress = useCallback(
+    (link: Link) => {
+      setSelectedLink(link);
+    },
+    [],
+  );
+
   return {
     movingLink,
+    selectedLink,
     setMovingLink,
+    setSelectedLink,
     handleDeleteLink,
     handleMoveLink,
+    handleRenameLink,
     handleLinkLongPress,
   };
 }
