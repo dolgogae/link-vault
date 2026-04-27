@@ -25,13 +25,10 @@ import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
 import { User } from '@/types';
 
+const GOOGLE_WEB_CLIENT_ID = '264839351848-47fbiajk6htuehuphknevon7vg68p8cf.apps.googleusercontent.com';
+
 export function initializeGoogleSignIn() {
-  const webClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
-  if (!webClientId) {
-    console.warn('[Auth] EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID가 설정되지 않았습니다.');
-    return;
-  }
-  GoogleSignin.configure({ webClientId });
+  GoogleSignin.configure({ webClientId: GOOGLE_WEB_CLIENT_ID });
 }
 
 export async function signInWithGoogle() {

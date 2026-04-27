@@ -53,14 +53,31 @@ interface InstagramHints {
   captionPreview: string | null;
 }
 
-function extractInstagramHints(url: string, metadata: LinkMetadata): InstagramHints {
+function normalizeInstagramUrl(url: string): string {
   const parsed = new URL(url);
   const pathParts = parsed.pathname.split('/').filter(Boolean);
+
+  // /share/reel/ABC → /reel/ABC, /share/p/ABC → /p/ABC
+  if (pathParts[0] === 'share' && pathParts.length >= 3) {
+    const newPath = '/' + pathParts.slice(1).join('/') + '/';
+    parsed.pathname = newPath;
+    return parsed.toString();
+  }
+
+  return url;
+}
+
+function extractInstagramHints(url: string, metadata: LinkMetadata): InstagramHints {
+  const parsed = new URL(url);
+  const rawParts = parsed.pathname.split('/').filter(Boolean);
+
+  // /share/ prefix 제거하여 실제 경로만 파싱
+  const pathParts = rawParts[0] === 'share' ? rawParts.slice(1) : rawParts;
 
   let username: string | null = null;
   let postType: InstagramHints['postType'] = 'unknown';
 
-  const systemPaths = ['explore', 'accounts', 'directory', 'about', 'legal', 'developer'];
+  const systemPaths = ['explore', 'accounts', 'directory', 'about', 'legal', 'developer', 'share'];
 
   if (pathParts[0] === 'p') {
     postType = 'post';
@@ -114,10 +131,12 @@ function extractInstagramHints(url: string, metadata: LinkMetadata): InstagramHi
 }
 
 async function fetchInstagramEmbedCaption(url: string): Promise<string | null> {
-  const match = url.match(/instagram\.com\/(p|reel|reels)\/[\w-]+/);
+  // /share/reel/ABC → /reel/ABC 형태로 정규화
+  const normalized = normalizeInstagramUrl(url);
+  const match = normalized.match(/instagram\.com\/(p|reel|reels)\/[\w-]+/);
   if (!match) return null;
 
-  const embedUrl = url.replace(/\/?(\?.*)?$/, '/embed/captioned/');
+  const embedUrl = normalized.replace(/\/?(\?.*)?$/, '/embed/captioned/');
 
   try {
     const res = await fetch(embedUrl, {
@@ -188,19 +207,129 @@ async function fetchOEmbed(
   }
 }
 
+function isUsableMetadata(title: string, description: string, bodyText: string): boolean {
+  const genericTitles = ['instagram', 'login', 'log in', '로그인'];
+  const lowerTitle = title.toLowerCase();
+  if (!title || genericTitles.some((g) => lowerTitle === g || lowerTitle.startsWith(g + ' '))) {
+    return description.length > 20 || bodyText.length > 80;
+  }
+  return true;
+}
+
+const INSTAGRAM_USER_AGENTS = [
+  'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)',
+  'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+  'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+];
+
+async function fetchWithUserAgent(
+  url: string,
+  userAgent: string,
+  timeoutMs: number,
+): Promise<Response | null> {
+  try {
+    const response = await fetch(url, {
+      signal: AbortSignal.timeout(timeoutMs),
+      headers: {
+        'User-Agent': userAgent,
+        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
+      },
+      redirect: 'follow',
+    });
+    if (!response.ok) return null;
+    return response;
+  } catch {
+    return null;
+  }
+}
+
+function parseHtmlMetadata(html: string, parsedUrl: URL): LinkMetadata {
+  const $ = cheerio.load(html);
+
+  const title =
+    $('meta[property="og:title"]').attr('content') ||
+    $('title').text() ||
+    '';
+
+  const description =
+    $('meta[property="og:description"]').attr('content') ||
+    $('meta[name="description"]').attr('content') ||
+    '';
+
+  const ogImage = $('meta[property="og:image"]').attr('content') || '';
+
+  let favicon =
+    $('link[rel="icon"]').attr('href') ||
+    $('link[rel="shortcut icon"]').attr('href') ||
+    '/favicon.ico';
+
+  if (favicon && !favicon.startsWith('http')) {
+    favicon = `${parsedUrl.protocol}//${parsedUrl.host}${favicon.startsWith('/') ? '' : '/'}${favicon}`;
+  }
+
+  $('script, style, nav, header, footer').remove();
+  const bodyText = $('body').text().replace(/\s+/g, ' ').trim().slice(0, 500);
+
+  return {
+    title: title.trim(),
+    description: description.trim(),
+    ogImage,
+    favicon,
+    domain: parsedUrl.hostname,
+    bodyText,
+  };
+}
+
 async function fetchAndParseHtml(
   url: string,
   parsedUrl: URL,
 ): Promise<LinkMetadata> {
-  const isWalledPlatform = ['instagram.com', 'tiktok.com'].some((d) =>
-    parsedUrl.hostname.includes(d),
-  );
+  const isInstagram = parsedUrl.hostname.includes('instagram.com');
+  const isWalledPlatform = isInstagram || parsedUrl.hostname.includes('tiktok.com');
+
+  const fallback: LinkMetadata = {
+    title: parsedUrl.hostname + decodeURIComponent(parsedUrl.pathname),
+    description: '',
+    ogImage: '',
+    favicon: `${parsedUrl.protocol}//${parsedUrl.host}/favicon.ico`,
+    domain: parsedUrl.hostname,
+    bodyText: `URL: ${url}`,
+  };
+
+  // Instagram: /share/ URL을 정규화하여 실제 콘텐츠 URL로 변환
+  const fetchUrl = isInstagram ? normalizeInstagramUrl(url) : url;
+
+  if (isInstagram) {
+    // Instagram은 UA별로 차단이 다르므로 순차적으로 시도
+    for (const ua of INSTAGRAM_USER_AGENTS) {
+      const response = await fetchWithUserAgent(fetchUrl, ua, 8000);
+      if (!response) continue;
+
+      try {
+        const html = await response.text();
+        const metadata = parseHtmlMetadata(html, parsedUrl);
+
+        if (isUsableMetadata(metadata.title, metadata.description, metadata.bodyText)) {
+          logger.info('Instagram fetch succeeded', { ua: ua.slice(0, 30), title: metadata.title.slice(0, 50) });
+          return metadata;
+        }
+      } catch {
+        continue;
+      }
+    }
+
+    logger.warn('All Instagram UA attempts failed, using fallback', { url });
+    return fallback;
+  }
+
+  // 일반 사이트
   const userAgent = isWalledPlatform
     ? 'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)'
     : 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 
   try {
-    const response = await fetch(url, {
+    const response = await fetch(fetchUrl, {
       signal: AbortSignal.timeout(10000),
       headers: {
         'User-Agent': userAgent,
@@ -212,51 +341,11 @@ async function fetchAndParseHtml(
 
     if (!response.ok) {
       logger.warn('HTTP fetch failed, using fallback metadata', { url, status: response.status });
-      return {
-        title: parsedUrl.hostname + decodeURIComponent(parsedUrl.pathname),
-        description: '',
-        ogImage: '',
-        favicon: `${parsedUrl.protocol}//${parsedUrl.host}/favicon.ico`,
-        domain: parsedUrl.hostname,
-        bodyText: `URL: ${url}`,
-      };
+      return fallback;
     }
 
     const html = await response.text();
-    const $ = cheerio.load(html);
-
-    const title =
-      $('meta[property="og:title"]').attr('content') ||
-      $('title').text() ||
-      '';
-
-    const description =
-      $('meta[property="og:description"]').attr('content') ||
-      $('meta[name="description"]').attr('content') ||
-      '';
-
-    const ogImage = $('meta[property="og:image"]').attr('content') || '';
-
-    let favicon =
-      $('link[rel="icon"]').attr('href') ||
-      $('link[rel="shortcut icon"]').attr('href') ||
-      '/favicon.ico';
-
-    if (favicon && !favicon.startsWith('http')) {
-      favicon = `${parsedUrl.protocol}//${parsedUrl.host}${favicon.startsWith('/') ? '' : '/'}${favicon}`;
-    }
-
-    $('script, style, nav, header, footer').remove();
-    const bodyText = $('body').text().replace(/\s+/g, ' ').trim().slice(0, 500);
-
-    return {
-      title: title.trim(),
-      description: description.trim(),
-      ogImage,
-      favicon,
-      domain: parsedUrl.hostname,
-      bodyText,
-    };
+    return parseHtmlMetadata(html, parsedUrl);
   } catch (error: any) {
     if (error instanceof HttpsError) throw error;
 
@@ -265,14 +354,7 @@ async function fetchAndParseHtml(
       error: error.message,
     });
 
-    return {
-      title: parsedUrl.hostname + decodeURIComponent(parsedUrl.pathname),
-      description: '',
-      ogImage: '',
-      favicon: `${parsedUrl.protocol}//${parsedUrl.host}/favicon.ico`,
-      domain: parsedUrl.hostname,
-      bodyText: `URL: ${url}`,
-    };
+    return fallback;
   }
 }
 
@@ -698,12 +780,15 @@ export const saveFullLink = onCall<{ url: string }>(
     const domain = parsedUrl.hostname;
     const isInstagram = domain.includes('instagram.com');
 
+    // Instagram /share/ URL을 정규화 (oEmbed, embed caption 등에서 사용)
+    const normalizedUrl = isInstagram ? normalizeInstagramUrl(url) : url;
+
     // ── Phase 1: Parallel metadata fetch ──────────────────────────────────
     // Main HTML fetch + oEmbed + Instagram embed all run simultaneously
     const [metadata, oembed, embedCaption] = await Promise.all([
       fetchAndParseHtml(url, parsedUrl),
-      fetchOEmbed(url, domain),
-      isInstagram ? fetchInstagramEmbedCaption(url) : Promise.resolve(null),
+      fetchOEmbed(normalizedUrl, domain),
+      isInstagram ? fetchInstagramEmbedCaption(normalizedUrl) : Promise.resolve(null),
     ]);
 
     // Apply oEmbed enrichment
@@ -766,6 +851,12 @@ export const saveFullLink = onCall<{ url: string }>(
         }
         if (titleParts.length > 0) {
           metadata.title = titleParts.join(' - ');
+        } else {
+          // 모든 메타데이터 추출이 실패한 경우 최소한의 title 제공
+          const typeLabel: Record<string, string> = {
+            post: '게시물', reel: '릴스', story: '스토리', profile: '프로필', unknown: '게시물',
+          };
+          metadata.title = `Instagram ${typeLabel[hints.postType]}`;
         }
       }
     }
