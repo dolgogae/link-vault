@@ -15,16 +15,35 @@ import { onSnapshot } from '@react-native-firebase/firestore';
 import { getUserRef } from '@/utils/firestore';
 import { PRODUCT_ID } from '@/constants/subscription';
 
-export async function initIAP(): Promise<void> {
+let iapReady = false;
+
+export async function initIAP(): Promise<boolean> {
   try {
     await initConnection();
-    await fetchProducts({ skus: [PRODUCT_ID], type: 'subs' });
+    const products = await fetchProducts({ skus: [PRODUCT_ID], type: 'subs' });
+    iapReady = products.length > 0;
+    if (!iapReady) {
+      console.warn('IAP 초기화: 구독 상품을 찾을 수 없습니다.', PRODUCT_ID);
+    }
+    return iapReady;
   } catch (error) {
+    iapReady = false;
     console.warn('IAP 초기화 실패:', error);
+    return false;
   }
 }
 
+export function isIAPReady(): boolean {
+  return iapReady;
+}
+
 export async function purchaseSubscription(): Promise<void> {
+  if (!iapReady) {
+    const ready = await initIAP();
+    if (!ready) {
+      throw new Error('결제 서비스에 연결할 수 없습니다. Google Play 스토어가 최신 버전인지 확인해주세요.');
+    }
+  }
   await requestPurchase({
     request: {
       android: {

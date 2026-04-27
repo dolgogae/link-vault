@@ -794,8 +794,10 @@ export const saveFullLink = onCall<{ url: string }>(
     // Apply oEmbed enrichment
     if (oembed) {
       const genericTitles = ['instagram', 'youtube', 'tiktok', 'x.com', 'twitter'];
+      const looksLikeUrl = /^https?:\/\//.test(metadata.title) || /^(www\.)?[\w.-]+\.(com|net|org|co|kr)/.test(metadata.title);
       const isGenericTitle =
         !metadata.title ||
+        looksLikeUrl ||
         genericTitles.some((g) => metadata.title.toLowerCase().includes(g) && metadata.title.length < 40);
 
       if (isGenericTitle && oembed.title) {
@@ -866,11 +868,13 @@ export const saveFullLink = onCall<{ url: string }>(
     // ── Phase 2: Parallel DB lookups ──────────────────────────────────────
     // Cache check + duplicate check + user doc read all run simultaneously
     const metadataHash = generateMetadataHash(metadata);
-    const [cachedCategory, existingLink, userDoc] = await Promise.all([
+    const [cachedCategory, existingLink, userDoc, categoriesSnapshot] = await Promise.all([
       db.collection('categoryCache').doc(metadataHash).get(),
       db.collection('users').doc(userId).collection('links')
         .where('url', '==', url).limit(1).get(),
       db.collection('users').doc(userId).get(),
+      db.collection('users').doc(userId).collection('categories')
+        .orderBy('depth').orderBy('order').get(),
     ]);
 
     // Duplicate check
@@ -930,15 +934,6 @@ export const saveFullLink = onCall<{ url: string }>(
     } else {
       logger.info('Cache miss', { hash: metadataHash });
 
-      // Fetch user categories for OpenAI context
-      const categoriesSnapshot = await db
-        .collection('users')
-        .doc(userId)
-        .collection('categories')
-        .orderBy('depth')
-        .orderBy('order')
-        .get();
-
       const categories = categoriesSnapshot.docs.map((doc) => ({
         id: doc.id,
         ...doc.data(),
@@ -989,7 +984,7 @@ export const saveFullLink = onCall<{ url: string }>(
             .filter(Boolean)
             .slice(0, 8);
 
-          const maxDepth = plan === 'premium' ? 4 : 2;
+          const maxDepth = plan === 'premium' ? 4 : 3;
           if (result.categoryPath.length > maxDepth) {
             result.categoryPath = result.categoryPath.slice(0, maxDepth);
           }
@@ -1144,6 +1139,28 @@ export const saveFullLink = onCall<{ url: string }>(
     } catch (error: any) {
       logger.error('saveFullLink batch.commit error', { error: error.message, stack: error.stack });
       throw new HttpsError('internal', `링크 저장 중 오류가 발생했습니다: ${error.message}`);
+    }
+
+    // 푸시 알림: fire-and-forget (응답 블로킹하지 않음)
+    const fcmToken = userData?.fcmToken;
+    if (fcmToken) {
+      admin.messaging().send({
+        token: fcmToken,
+        notification: {
+          title: '링크 저장 완료',
+          body: `${metadata.title || url} → ${categoryPath.join(' > ')}`,
+        },
+        data: {
+          type: 'save_complete',
+          linkId: linkRef.id,
+          categoryPath: JSON.stringify(categoryPath),
+        },
+        android: {
+          priority: 'high',
+        },
+      }).catch((err: any) =>
+        logger.warn('푸시 알림 전송 실패', { error: err.message }),
+      );
     }
 
     return {

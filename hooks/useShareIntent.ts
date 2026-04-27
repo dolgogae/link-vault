@@ -11,9 +11,10 @@ export function useShareIntentHandler() {
   const { incrementSaveCount, setSaving, setSaveResult } = useLinkStore();
 
   useEffect(() => {
-    if (!shareIntent?.text || !user) return;
+    if (!user) return;
+    if (!shareIntent?.text && !shareIntent?.webUrl) return;
 
-    const url = extractUrl(shareIntent.text);
+    const url = shareIntent.webUrl || extractUrl(shareIntent.text || '');
     if (!url) {
       resetShareIntent();
       return;
@@ -32,19 +33,26 @@ export function useShareIntentHandler() {
 
     setSaving(true);
     setSaveResult(null);
-    try {
-      const result = await analyzeAndSaveLink(url);
-      incrementSaveCount();
-      setSaveResult({ type: 'success', categoryPath: result.categoryPath });
-    } catch (error: any) {
-      if (error.code === 'already-exists') {
-        setSaveResult({ type: 'error', message: '이미 저장된 링크입니다.' });
-      } else {
-        setSaveResult({ type: 'error', message: '링크 저장에 실패했습니다.' });
-      }
-    } finally {
-      setSaving(false);
-    }
+
+    // 백그라운드 저장: fire-and-forget 후 푸시 알림으로 결과 수신
+    analyzeAndSaveLink(url)
+      .then((result) => {
+        incrementSaveCount();
+        setSaveResult({ type: 'success', categoryPath: result.categoryPath });
+      })
+      .catch((error: any) => {
+        if (error.code === 'already-exists') {
+          setSaveResult({ type: 'error', message: '이미 저장된 링크입니다.' });
+        } else {
+          setSaveResult({ type: 'error', message: '링크 저장에 실패했습니다.' });
+        }
+      })
+      .finally(() => {
+        setSaving(false);
+      });
+
+    // 즉시 진행중 토스트 표시 후 앱 전환 가능
+    setSaveResult(null);
   };
 }
 

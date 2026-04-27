@@ -35,4 +35,28 @@ describe('extractUrl', () => {
       extractUrl('이 링크 봐봐 https://naver.com/news/123 진짜 재밌어'),
     ).toBe('https://naver.com/news/123');
   });
+
+  it('extracts Instagram share URL', () => {
+    expect(
+      extractUrl('https://www.instagram.com/share/reel/ABC123/?igsh=xyz'),
+    ).toBe('https://www.instagram.com/share/reel/ABC123/?igsh=xyz');
+  });
+
+  it('extracts Instagram reel URL', () => {
+    expect(
+      extractUrl('https://www.instagram.com/reel/ABC123/'),
+    ).toBe('https://www.instagram.com/reel/ABC123/');
+  });
+
+  it('extracts YouTube URL with query params', () => {
+    expect(
+      extractUrl('https://www.youtube.com/watch?v=dQw4w9WgXcQ'),
+    ).toBe('https://www.youtube.com/watch?v=dQw4w9WgXcQ');
+  });
+
+  it('extracts youtu.be short URL', () => {
+    expect(
+      extractUrl('https://youtu.be/dQw4w9WgXcQ'),
+    ).toBe('https://youtu.be/dQw4w9WgXcQ');
+  });
 });

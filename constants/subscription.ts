@@ -1,7 +1,7 @@
 export const PLAN_LIMITS = {
   free: {
     monthlyLinks: 30,
-    maxCategoryDepth: 2,
+    maxCategoryDepth: 3,
     interstitialThreshold: 3,
   },
   premium: {

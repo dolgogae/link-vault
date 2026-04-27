@@ -19,6 +19,13 @@ import {
 import type { Purchase, PurchaseError } from '@/services/subscription';
 import { useShareIntentHandler } from '@/hooks/useShareIntent';
 import { SaveProgressToast } from '@/components/SaveProgressToast';
+import {
+  requestNotificationPermission,
+  registerFCMToken,
+  setupTokenRefreshListener,
+  setupForegroundMessageHandler,
+} from '@/services/notifications';
+import { useLinkStore } from '@/stores/linkStore';
 
 import '../global.css';
 
@@ -104,6 +111,34 @@ function RootLayoutNav() {
       endIAP();
     };
   }, []);
+
+  // FCM 알림 초기화
+  useEffect(() => {
+    const userId = user?.uid;
+    if (!userId) return;
+
+    let tokenRefreshUnsub: (() => void) | undefined;
+    let foregroundUnsub: (() => void) | undefined;
+
+    (async () => {
+      const granted = await requestNotificationPermission();
+      if (!granted) return;
+
+      await registerFCMToken(userId);
+      tokenRefreshUnsub = setupTokenRefreshListener(userId);
+      foregroundUnsub = setupForegroundMessageHandler((title, body, data) => {
+        if (data?.type === 'save_complete') {
+          const categoryPath = data.categoryPath ? JSON.parse(data.categoryPath) as string[] : [];
+          useLinkStore.getState().setSaveResult({ type: 'success', categoryPath });
+        }
+      });
+    })();
+
+    return () => {
+      tokenRefreshUnsub?.();
+      foregroundUnsub?.();
+    };
+  }, [user?.uid]);
 
   // 구독 상태 실시간 동기화
   useEffect(() => {

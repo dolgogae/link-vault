@@ -13,6 +13,7 @@ export default function SettingsScreen() {
   const { user } = useAuthStore();
   const { plan, monthlyLinksSaved } = useSubscriptionStore();
   const [isCleaning, setIsCleaning] = useState(false);
+  const [isPurchasing, setIsPurchasing] = useState(false);
 
   const handleCleanup = async () => {
     setIsCleaning(true);
@@ -106,14 +107,23 @@ export default function SettingsScreen() {
             icon="diamond"
             label="프리미엄으로 업그레이드"
             onPress={async () => {
+              if (isPurchasing) return;
+              setIsPurchasing(true);
               try {
                 await purchaseSubscription();
               } catch (error: any) {
                 if (error.code !== ErrorCode.UserCancelled) {
-                  Alert.alert('오류', '구매 처리에 실패했습니다.');
+                  Alert.alert('오류', error.message || '구매 처리에 실패했습니다.');
                 }
+              } finally {
+                setIsPurchasing(false);
               }
             }}
+            right={
+              isPurchasing ? (
+                <ActivityIndicator size="small" color="#8000C8" />
+              ) : undefined
+            }
           />
         </>
       )}
