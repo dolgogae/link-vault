@@ -28,7 +28,8 @@ export function SaveProgressToast() {
     }
 
     if (!isSaving && saveResult) {
-      // 결과 표시 후 3초 뒤 자동 숨김
+      // 결과 표시 후 자동 숨김 (에러는 5초, 성공은 3초)
+      const timeout = saveResult.type === 'error' ? 5000 : 3000;
       const timer = setTimeout(() => {
         Animated.parallel([
           Animated.timing(translateY, {
@@ -44,7 +45,7 @@ export function SaveProgressToast() {
         ]).start(() => {
           setSaveResult(null);
         });
-      }, 3000);
+      }, timeout);
       return () => clearTimeout(timer);
     }
   }, [visible, isSaving, saveResult]);

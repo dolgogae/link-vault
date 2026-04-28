@@ -59,11 +59,52 @@ function normalizeInstagramUrl(url: string): string {
 
   // /share/reel/ABC → /reel/ABC, /share/p/ABC → /p/ABC
   if (pathParts[0] === 'share' && pathParts.length >= 3) {
-    const newPath = '/' + pathParts.slice(1).join('/') + '/';
-    parsed.pathname = newPath;
-    return parsed.toString();
+    parsed.pathname = '/' + pathParts.slice(1).join('/') + '/';
   }
 
+  // tracking params 제거 (igsh, utm_*, ig_*)
+  const paramsToRemove = [...parsed.searchParams.keys()]
+    .filter(k => k === 'igsh' || k.startsWith('utm_') || k.startsWith('ig_'));
+  paramsToRemove.forEach(k => parsed.searchParams.delete(k));
+
+  return parsed.toString();
+}
+
+function normalizeYouTubeUrl(url: string): string {
+  const parsed = new URL(url);
+
+  // youtu.be/ID → youtube.com/watch?v=ID
+  if (parsed.hostname === 'youtu.be') {
+    const videoId = parsed.pathname.slice(1).split('/')[0];
+    return `https://www.youtube.com/watch?v=${videoId}`;
+  }
+
+  // m.youtube.com → www.youtube.com
+  if (parsed.hostname === 'm.youtube.com') {
+    parsed.hostname = 'www.youtube.com';
+  }
+
+  // /shorts/ID → /watch?v=ID
+  const shortsMatch = parsed.pathname.match(/^\/shorts\/([\w-]+)/);
+  if (shortsMatch) {
+    parsed.pathname = '/watch';
+    parsed.searchParams.set('v', shortsMatch[1]);
+  }
+
+  // 불필요한 params 제거 (list, index, t, si, utm_* 등) — v만 유지
+  const videoId = parsed.searchParams.get('v');
+  const allParams = [...parsed.searchParams.keys()];
+  allParams.filter(k => k !== 'v').forEach(k => parsed.searchParams.delete(k));
+  if (videoId && !parsed.searchParams.has('v')) {
+    parsed.searchParams.set('v', videoId);
+  }
+
+  return parsed.toString();
+}
+
+function normalizeUrlForStorage(url: string, domain: string): string {
+  if (domain.includes('instagram.com')) return normalizeInstagramUrl(url);
+  if (domain.includes('youtube.com') || domain === 'youtu.be' || domain === 'm.youtube.com') return normalizeYouTubeUrl(url);
   return url;
 }
 
@@ -171,6 +212,8 @@ const OEMBED_PLATFORMS: Record<string, (url: string) => string> = {
   'youtube.com': (url) =>
     `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`,
   'youtu.be': (url) =>
+    `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`,
+  'm.youtube.com': (url) =>
     `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`,
   'instagram.com': (url) =>
     `https://noembed.com/embed?url=${encodeURIComponent(url)}`,
@@ -594,7 +637,7 @@ ${categoryTree || '(아직 카테고리가 없습니다. 새로 생성하세요.
 }
 
 const SOCIAL_DOMAINS = new Set([
-  'youtube.com', 'youtu.be', 'm.youtube.com',
+  'youtube.com', 'youtu.be', 'm.youtube.com', 'www.youtube.com',
   'instagram.com', 'www.instagram.com',
   'twitter.com', 'x.com', 'mobile.twitter.com',
   'tiktok.com', 'www.tiktok.com',
@@ -763,14 +806,14 @@ export const saveFullLink = onCall<{ url: string }>(
       throw new HttpsError('unauthenticated', '인증이 필요합니다.');
     }
 
-    const { url } = request.data;
-    if (!url) {
+    const { url: rawUrl } = request.data;
+    if (!rawUrl) {
       throw new HttpsError('invalid-argument', 'URL이 필요합니다.');
     }
 
     let parsedUrl: URL;
     try {
-      parsedUrl = new URL(url);
+      parsedUrl = new URL(rawUrl);
     } catch {
       throw new HttpsError('invalid-argument', '유효하지 않은 URL입니다.');
     }
@@ -780,15 +823,17 @@ export const saveFullLink = onCall<{ url: string }>(
     const domain = parsedUrl.hostname;
     const isInstagram = domain.includes('instagram.com');
 
-    // Instagram /share/ URL을 정규화 (oEmbed, embed caption 등에서 사용)
-    const normalizedUrl = isInstagram ? normalizeInstagramUrl(url) : url;
+    // URL 정규화: tracking params 제거, /share/ prefix 정리, shorts→watch 변환
+    // 정규화된 URL을 이후 모든 로직(중복 체크, DB 저장, oEmbed)에서 사용
+    const url = normalizeUrlForStorage(rawUrl, domain);
+    parsedUrl = new URL(url);
 
     // ── Phase 1: Parallel metadata fetch ──────────────────────────────────
     // Main HTML fetch + oEmbed + Instagram embed all run simultaneously
     const [metadata, oembed, embedCaption] = await Promise.all([
       fetchAndParseHtml(url, parsedUrl),
-      fetchOEmbed(normalizedUrl, domain),
-      isInstagram ? fetchInstagramEmbedCaption(normalizedUrl) : Promise.resolve(null),
+      fetchOEmbed(url, parsedUrl.hostname),
+      isInstagram ? fetchInstagramEmbedCaption(url) : Promise.resolve(null),
     ]);
 
     // Apply oEmbed enrichment
@@ -999,49 +1044,53 @@ export const saveFullLink = onCall<{ url: string }>(
               classificationContext.richnessScore,
             )
           ) {
-            const refinementModel = CLASSIFICATION_MODELS[Math.min(retries, CLASSIFICATION_MODELS.length - 1)];
-            const refinement = await openai.chat.completions.create({
-              model: refinementModel,
-              messages: [
-                { role: 'system', content: buildSystemPrompt(treeString) },
-                {
-                  role: 'user',
-                  content: buildRefinementPrompt(
-                    metadata,
-                    classificationContext,
-                    result,
-                  ),
-                },
-              ],
-              response_format: { type: 'json_object' },
-              reasoning_effort: 'medium',
-              max_completion_tokens: 2048,
-            });
+            try {
+              const refinementModel = CLASSIFICATION_MODELS[Math.min(retries, CLASSIFICATION_MODELS.length - 1)];
+              const refinement = await openai.chat.completions.create({
+                model: refinementModel,
+                messages: [
+                  { role: 'system', content: buildSystemPrompt(treeString) },
+                  {
+                    role: 'user',
+                    content: buildRefinementPrompt(
+                      metadata,
+                      classificationContext,
+                      result,
+                    ),
+                  },
+                ],
+                response_format: { type: 'json_object' },
+                reasoning_effort: 'medium',
+                max_completion_tokens: 2048,
+              });
 
-            logger.info('OpenAI refinement response', {
-              model: refinementModel,
-              finishReason: refinement.choices[0]?.finish_reason,
-              content: refinement.choices[0]?.message?.content,
-              usage: refinement.usage,
-            });
+              logger.info('OpenAI refinement response', {
+                model: refinementModel,
+                finishReason: refinement.choices[0]?.finish_reason,
+                content: refinement.choices[0]?.message?.content,
+                usage: refinement.usage,
+              });
 
-            const refinementContent = refinement.choices[0]?.message?.content;
-            if (!refinementContent) {
-              throw new Error('AI 재분류 응답이 비어있습니다.');
-            }
+              const refinementContent = refinement.choices[0]?.message?.content;
+              if (refinementContent) {
+                const refinedResult = JSON.parse(refinementContent) as ClassificationResult;
+                refinedResult.categoryPath = (refinedResult.categoryPath || [])
+                  .map((name) => sanitizeCategoryName(name))
+                  .filter(Boolean)
+                  .slice(0, maxDepth);
+                refinedResult.tags = (refinedResult.tags || [])
+                  .map((tag) => sanitizeTag(tag))
+                  .filter(Boolean)
+                  .slice(0, 8);
 
-            const refinedResult = JSON.parse(refinementContent) as ClassificationResult;
-            refinedResult.categoryPath = (refinedResult.categoryPath || [])
-              .map((name) => sanitizeCategoryName(name))
-              .filter(Boolean)
-              .slice(0, maxDepth);
-            refinedResult.tags = (refinedResult.tags || [])
-              .map((tag) => sanitizeTag(tag))
-              .filter(Boolean)
-              .slice(0, 8);
-
-            if (refinedResult.categoryPath.length > 0) {
-              result = refinedResult;
+                if (refinedResult.categoryPath.length > 0) {
+                  result = refinedResult;
+                }
+              }
+            } catch (refinementError: any) {
+              logger.warn('Refinement failed, keeping initial result', {
+                error: refinementError.message,
+              });
             }
           }
 

@@ -128,7 +128,12 @@ function RootLayoutNav() {
       tokenRefreshUnsub = setupTokenRefreshListener(userId);
       foregroundUnsub = setupForegroundMessageHandler((title, body, data) => {
         if (data?.type === 'save_complete') {
-          const categoryPath = data.categoryPath ? JSON.parse(data.categoryPath) as string[] : [];
+          let categoryPath: string[] = [];
+          try {
+            categoryPath = data.categoryPath ? JSON.parse(data.categoryPath) as string[] : [];
+          } catch {
+            // malformed data 무시
+          }
           useLinkStore.getState().setSaveResult({ type: 'success', categoryPath });
         }
       });
