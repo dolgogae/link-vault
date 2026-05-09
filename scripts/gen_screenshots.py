@@ -2,7 +2,7 @@
 from PIL import Image, ImageDraw, ImageFont
 import os
 
-OUT = '/Users/sihun/workspace/projects/link-vault/dist/screenshots'
+OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'dist', 'screenshots')
 os.makedirs(OUT, exist_ok=True)
 
 KF  = '/System/Library/Fonts/AppleSDGothicNeo.ttc'   # Korean + general
