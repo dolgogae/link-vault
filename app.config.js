@@ -1,7 +1,7 @@
 const { execSync } = require('child_process');
 
 const commitCount = parseInt(execSync('git rev-list --count HEAD').toString().trim());
-const versionCode = Math.max(commitCount, 108);
+const versionCode = Math.max(commitCount + 6, 109);
 
 module.exports = {
   expo: {
